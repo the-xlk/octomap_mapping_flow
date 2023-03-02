@@ -564,7 +564,7 @@ void OctomapServer::insertScan(const tf::Point& sensorOriginTf, const PCLPointCl
     }
   }
 
-  double size = m_octree->getNodeSize(origin);
+  double size = m_octree->getNodeSize(m_maxTreeDepth);
 
   for (auto it = occupiedFloatingCells.begin(), end=occupiedFloatingCells.end(); it!= end; it++) {
     int x = (int)(it->first)[0]-newOffsetx;
