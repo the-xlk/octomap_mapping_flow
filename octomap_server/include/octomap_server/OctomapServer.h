@@ -206,7 +206,7 @@ protected:
   static std_msgs::ColorRGBA heightMapColor(double h);
   ros::NodeHandle m_nh;
   ros::NodeHandle m_nh_private;
-  ros::Publisher  m_markerPub, m_binaryMapPub, m_fullMapPub, m_pointCloudPub, m_collisionObjectPub, m_mapPub, m_cmapPub, m_fmapPub, m_fmarkerPub;
+  ros::Publisher  m_markerPub, m_deltaPub, m_flowPub, m_binaryMapPub, m_fullMapPub, m_pointCloudPub, m_collisionObjectPub, m_mapPub, m_cmapPub, m_fmapPub, m_fmarkerPub;
   message_filters::Subscriber<sensor_msgs::PointCloud2>* m_pointCloudSub;
   tf::MessageFilter<sensor_msgs::PointCloud2>* m_tfPointCloudSub;
   ros::ServiceServer m_octomapBinaryService, m_octomapFullService, m_clearBBXService, m_resetService;
@@ -218,6 +218,35 @@ protected:
   octomap::KeyRay m_keyRay;  // temp storage for ray casting
   octomap::OcTreeKey m_updateBBXMin;
   octomap::OcTreeKey m_updateBBXMax;
+
+  //!!!
+  octomap::KeySet free_cells;//, occupied_cells;
+  struct FlowCell{            // Structure declaration
+    int state;        // 0:clear ; 1:unseen ; 2:seen ; 3:seen+moving
+    float x;          //offset
+    float y;
+    float z;
+    float xs;         //speed
+    float ys;
+    float zs;
+  };
+  struct PointWeight{
+    float x;
+    float y;
+    float z;
+    int weight;
+  };
+  std::tr1::unordered_map<octomap::OcTreeKey, PointWeight,octomap::OcTreeKey::KeyHash> occupiedFloatingCells;
+  //std::tr1::unordered_map<octomap::OcTreeKey, PointWeight> occupiedFloatingCells;
+  //hash<octomap::OcTreeKey>{} octomap::OcTreeKey::KeyHash(p.first); 
+
+  FlowCell b1[4096];//16^3
+  FlowCell b2[4096];//16^3
+  FlowCell *flowMap1 = b1;
+  FlowCell *flowMap2 = b2;
+  
+  octomap::OcTreeKey origin;
+  int offsetx,offsety,offsetz;
 
   double m_minRange;
   double m_maxRange;

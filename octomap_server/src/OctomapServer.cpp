@@ -159,6 +159,9 @@ OctomapServer::OctomapServer(const ros::NodeHandle private_nh_, const ros::NodeH
   m_colorFree.b = b;
   m_colorFree.a = a;
 
+  //!!!
+  //KeySet free_cells, occupied_cells;
+
   m_nh_private.param("publish_free_space", m_publishFreeSpace, m_publishFreeSpace);
 
   m_nh_private.param("latch", m_latchedTopics, m_latchedTopics);
@@ -168,6 +171,8 @@ OctomapServer::OctomapServer(const ros::NodeHandle private_nh_, const ros::NodeH
     ROS_INFO("Publishing non-latched (topics are only prepared as needed, will only be re-published on map change");
 
   m_markerPub = m_nh.advertise<visualization_msgs::MarkerArray>("occupied_cells_vis_array", 1, m_latchedTopics);
+  m_deltaPub = m_nh.advertise<visualization_msgs::MarkerArray>("delta_cells_vis_array", 1, m_latchedTopics);
+  m_flowPub = m_nh.advertise<visualization_msgs::MarkerArray>("flow_cells_vis_array", 1, m_latchedTopics);
   m_binaryMapPub = m_nh.advertise<Octomap>("octomap_binary", 1, m_latchedTopics);
   m_fullMapPub = m_nh.advertise<Octomap>("octomap_full", 1, m_latchedTopics);
   m_pointCloudPub = m_nh.advertise<sensor_msgs::PointCloud2>("octomap_point_cloud_centers", 1, m_latchedTopics);
@@ -186,6 +191,13 @@ OctomapServer::OctomapServer(const ros::NodeHandle private_nh_, const ros::NodeH
   dynamic_reconfigure::Server<OctomapServerConfig>::CallbackType f;
   f = boost::bind(&OctomapServer::reconfigureCallback, this, boost::placeholders::_1, boost::placeholders::_2);
   m_reconfigureServer.setCallback(f);
+
+  //!!! Initialize flowmap
+  for(int i=0; i<4096; i++){
+    flowMap1[i]={1,0,0,0,0,0,0};
+    flowMap2[i]={1,0,0,0,0,0,0};
+  }
+  offsetx,offsety,offsetz=0;
 }
 
 OctomapServer::~OctomapServer(){
@@ -368,7 +380,8 @@ void OctomapServer::insertScan(const tf::Point& sensorOriginTf, const PCLPointCl
 #endif
 
   // instead of direct scan insertion, compute update to filter ground:
-  KeySet free_cells, occupied_cells;
+  free_cells.clear();
+  occupiedFloatingCells.clear();
   // insert ground points only as free:
   for (PCLPointCloud::const_iterator it = ground.begin(); it != ground.end(); ++it){
     point3d point(it->x, it->y, it->z);
@@ -410,7 +423,14 @@ void OctomapServer::insertScan(const tf::Point& sensorOriginTf, const PCLPointCl
       // occupied endpoint
       OcTreeKey key;
       if (m_octree->coordToKeyChecked(point, key)){
-        occupied_cells.insert(key);
+        occupiedFloatingCells.find(key);
+        if (occupiedFloatingCells.find(key) == occupiedFloatingCells.end()){
+          occupiedFloatingCells[key]=PointWeight{point.x(),point.y(),point.z(),1};
+        }else{
+          PointWeight prev=occupiedFloatingCells[key];
+          occupiedFloatingCells[key]=PointWeight{prev.x+point.x(),prev.y+point.y(),prev.z+point.z(),prev.weight+1};
+        }
+        //occupiedFloatingCells.insert(key);
 
         updateMinKey(key, m_updateBBXMin);
         updateMaxKey(key, m_updateBBXMax);
@@ -438,17 +458,24 @@ void OctomapServer::insertScan(const tf::Point& sensorOriginTf, const PCLPointCl
     }
   }
 
+  //!!!
+  float shift = m_octree->getNodeSize(m_treeDepth)/2;
+  point3d shiftedOrigin = point3d(sensorOrigin.x()+shift,sensorOrigin.y()+shift,sensorOrigin.z()+shift);
+  m_octree->coordToKeyChecked(sensorOrigin, origin);
+
+  // now mark all occupied cells:
+  for (auto it : occupiedFloatingCells) {
+    m_octree->setNodeValue(it.first, 1.0);//!!!
+  }
+  
   // mark free cells only if not seen occupied in this cloud
   for(KeySet::iterator it = free_cells.begin(), end=free_cells.end(); it!= end; ++it){
-    if (occupied_cells.find(*it) == occupied_cells.end()){
+    if (occupiedFloatingCells.find(*it) == occupiedFloatingCells.end()){//not in occupied cells
       m_octree->updateNode(*it, false);
     }
   }
 
-  // now mark all occupied cells:
-  for (KeySet::iterator it = occupied_cells.begin(), end=occupied_cells.end(); it!= end; it++) {
-    m_octree->updateNode(*it, true);
-  }
+
 
   // TODO: eval lazy+updateInner vs. proper insertion
   // non-lazy by default (updateInnerOccupancy() too slow for large maps)
@@ -484,6 +511,117 @@ void OctomapServer::insertScan(const tf::Point& sensorOriginTf, const PCLPointCl
     colors = NULL;
   }
 #endif
+
+  //!!!
+  int newOffsetx = (int)((origin)[0])-8;//!!! 16/2
+  int newOffsety = (int)((origin)[1])-8;
+  int newOffsetz = (int)((origin)[2])-8;
+
+  int deltaOffsetx = offsetx - newOffsetx;
+  int deltaOffsety = offsety - newOffsety;
+  int deltaOffsetz = offsetz - newOffsetz;
+
+  //ROS_WARN("offset: %d %d %d", deltaOffsetx,deltaOffsety,deltaOffsetz);
+        
+
+
+  
+  for(int x=0; x<16; x++){ //scroll onto flowmap2
+    if(x<deltaOffsetx || x>=16+deltaOffsetx){//clipped by scroll
+      for(int y=0; y<16; y++){
+        for(int z=0; z<16; z++){
+          flowMap2[x+y*16+z*256]={1,0,0,0,0,0,0};
+        }
+      }
+    }else{
+      for(int y=0; y<16; y++){
+        if(y<deltaOffsety || y>=16+deltaOffsety){//clipped by scroll
+          for(int z=0; z<16; z++){
+            flowMap2[x+y*16+z*256]={1,0,0,0,0,0,0};
+          }
+       }else{
+          for(int z=0; z<16; z++){
+            if(z<deltaOffsetz || z>=16+deltaOffsetz){//clipped by scroll
+              flowMap2[x+y*16+z*256]={1,0,0,0,0,0,0};
+            }else{//scroll
+              flowMap2[x+y*16+z*256]=flowMap1[x-deltaOffsetx+(y-deltaOffsety)*16+(z-deltaOffsetz)*256];
+            }
+          }
+        }
+      }
+    }
+  }
+  offsetx=newOffsetx;
+  offsety=newOffsety;
+  offsetz=newOffsetz;
+  
+  for (KeySet::iterator it = free_cells.begin(), end=free_cells.end(); it!= end; it++) {
+    int x = (int)(*it)[0]-newOffsetx;
+    int y = (int)(*it)[1]-newOffsety;
+    int z = (int)(*it)[2]-newOffsetz;
+    if(x>=0 && y>=0 && z>=0 && x<16 && y<16 && z<16){
+      flowMap2[x+y*16+z*256]={0,0,0,0,0,0,0};
+    }
+  }
+
+  double size = m_octree->getNodeSize(origin);
+
+  for (auto it = occupiedFloatingCells.begin(), end=occupiedFloatingCells.end(); it!= end; it++) {
+    int x = (int)(it->first)[0]-newOffsetx;
+    int y = (int)(it->first)[1]-newOffsety;
+    int z = (int)(it->first)[2]-newOffsetz;
+    //float s = m_octree->size();  //keeping it in meters and not cells for visualization
+    if(x>=0 && y>=0 && z>=0 && x<16 && y<16 && z<16){
+      PointWeight p = it->second;
+      point3d pcell = m_octree->keyToCoord(it->first);
+      FlowCell prev = flowMap2[x+y*16+z*256];
+      if(prev.state>1){//correct
+        flowMap2[x+y*16+z*256]={2,
+                    p.x/p.weight-pcell.x(),
+                    p.y/p.weight-pcell.y(),
+                    p.z/p.weight-pcell.z(),
+                    0.5f*prev.xs+0.5f*((p.x/p.weight-pcell.x())-prev.x),
+                    0.5f*prev.ys+0.5f*((p.y/p.weight-pcell.y())-prev.y),
+                    0.5f*prev.zs+0.5f*((p.z/p.weight-pcell.z())-prev.z)};
+      }else{//"spawn"
+        FlowCell kernel = {0,0,0,0,0,0,0};//count, totals
+        for(int kx=std::max(0,x-2);kx<std::min(x+2,16);kx++){//kernel
+          for(int ky=std::max(0,y-2);ky<std::min(y+2,16);ky++){
+            for(int kz=std::max(0,z-2);kz<std::min(z+2,16);kz++){
+              prev = flowMap2[kx+(ky)*16+(kz)*256];
+              if(prev.state>1){
+                kernel = {kernel.state+1,
+                          kernel.x+prev.x+(kx-x)*size,
+                          kernel.y+prev.y+(ky-y)*size,
+                          kernel.z+prev.z+(kz-z)*size,
+                          kernel.xs+prev.xs,
+                          kernel.ys+prev.ys,
+                          kernel.zs+prev.zs};
+              }
+            }
+          }
+        }
+        float count =std::max(1,kernel.state);
+        kernel = {2,
+                  p.x/p.weight-pcell.x(),//viewed pose
+                  p.y/p.weight-pcell.y(),
+                  p.z/p.weight-pcell.z(),
+                  0.5f*kernel.xs/count+0.5f*((p.x/p.weight-pcell.x())-kernel.x/count),//average delta pose and prev-velocity
+                  0.5f*kernel.ys/count+0.5f*((p.y/p.weight-pcell.y())-kernel.y/count),
+                  0.5f*kernel.zs/count+0.5f*((p.z/p.weight-pcell.z())-kernel.z/count)};
+        flowMap2[x+y*16+z*256]=kernel;
+      }
+      //flowMap2[x+y*16+z*256]={2,p.x/p.weight-pcell.x(),p.y/p.weight-pcell.y(),p.z/p.weight-pcell.z(),0,0,0};
+    }
+    
+  }
+
+  //swap buffers
+  
+  FlowCell * swap = flowMap1;
+  flowMap1 = flowMap2;
+  flowMap2 = swap;
+  
 }
 
 void OctomapServer::publishProjected2DMap(const ros::Time& rostime) {
@@ -508,6 +646,8 @@ void OctomapServer::publishAll(const ros::Time& rostime){
   bool publishPointCloud = (m_latchedTopics || m_pointCloudPub.getNumSubscribers() > 0);
   bool publishBinaryMap = (m_latchedTopics || m_binaryMapPub.getNumSubscribers() > 0);
   bool publishFullMap = (m_latchedTopics || m_fullMapPub.getNumSubscribers() > 0);
+  bool publishDeltaMarkerArray = (m_latchedTopics || m_deltaPub.getNumSubscribers() > 0);
+  bool publishFlowMarkerArray = (m_latchedTopics || m_flowPub.getNumSubscribers() > 0);
 
   // init markers for free space:
   visualization_msgs::MarkerArray freeNodesVis;
@@ -521,6 +661,16 @@ void OctomapServer::publishAll(const ros::Time& rostime){
   visualization_msgs::MarkerArray occupiedNodesVis;
   // each array stores all cubes of a different size, one for each depth level:
   occupiedNodesVis.markers.resize(m_treeDepth+1);
+
+  // init markers for deltas:
+  visualization_msgs::MarkerArray deltaNodesVis;
+  // each array stores all cubes of a different size, one for each depth level:
+  deltaNodesVis.markers.resize(m_treeDepth+1);
+
+  // init markers for flow:
+  visualization_msgs::MarkerArray flowNodesVis;
+  // each array stores all cubes of a different size, one for each depth level:
+  flowNodesVis.markers.resize(2);
 
   // init pointcloud:
   pcl::PointCloud<PCLPoint> pclCloud;
@@ -699,6 +849,144 @@ void OctomapServer::publishAll(const ros::Time& rostime){
     cloud.header.frame_id = m_worldFrameId;
     cloud.header.stamp = rostime;
     m_pointCloudPub.publish(cloud);
+  }
+
+  // Prep delta !!!
+  if(publishDeltaMarkerArray){
+    //!!!
+    //ROS_WARN_STREAM("key: x :"<< (int)((*occupied_cells.begin())[0])-(int)((origin)[0])<<
+    //                "key: y :"<< (int)((*occupied_cells.begin())[1])-(int)((origin)[0])<<
+    //                "key: z :"<< (int)((*occupied_cells.begin())[2])-(int)((origin)[0])) ;
+    for (auto it = occupiedFloatingCells.begin(), end=occupiedFloatingCells.end(); it!= end; it++) {
+      octomap::point3d point = m_octree->keyToCoord(it->first);
+      
+      //double z = *it->getZ();
+      //double half_size = *it->getSize() / 2.0;
+      //double size = m_octree->getNodeSize(*it);
+      //double x = *it->getX();
+      //double y = *it->getY();
+
+
+      //unsigned idx = *it->getDepth();
+      //assert(idx < deltaNodesVis.markers.size());
+
+      geometry_msgs::Point cubeCenter;
+      cubeCenter.x = point.x();
+      cubeCenter.y = point.y();
+      cubeCenter.z = point.z();
+
+      deltaNodesVis.markers[m_treeDepth].points.push_back(cubeCenter);
+      if (m_useHeightMap){
+        double minX, minY, minZ, maxX, maxY, maxZ;
+        m_octree->getMetricMin(minX, minY, minZ);
+        m_octree->getMetricMax(maxX, maxY, maxZ);
+
+        double h = (1.0 - std::min(std::max((cubeCenter.z-minZ)/ (maxZ - minZ), 0.0), 1.0)) *m_colorFactor;
+        deltaNodesVis.markers[m_treeDepth].colors.push_back(heightMapColor(h));
+      }
+    }
+    // finish delta
+    for (unsigned i= 0; i < deltaNodesVis.markers.size(); ++i){
+      double size = m_octree->getNodeSize(i);
+
+      deltaNodesVis.markers[i].header.frame_id = m_worldFrameId;
+      deltaNodesVis.markers[i].header.stamp = rostime;
+      deltaNodesVis.markers[i].ns = "map";
+      deltaNodesVis.markers[i].id = i;
+      deltaNodesVis.markers[i].type = visualization_msgs::Marker::CUBE_LIST;
+      deltaNodesVis.markers[i].scale.x = size;
+      deltaNodesVis.markers[i].scale.y = size;
+      deltaNodesVis.markers[i].scale.z = size;
+      if (!m_useColoredMap)
+        deltaNodesVis.markers[i].color = m_color;
+
+
+      if (deltaNodesVis.markers[i].points.size() > 0)
+        deltaNodesVis.markers[i].action = visualization_msgs::Marker::ADD;
+      else
+        deltaNodesVis.markers[i].action = visualization_msgs::Marker::DELETE;
+    }
+
+    m_deltaPub.publish(deltaNodesVis);
+  }
+
+  // Prep flow !!!
+  if(publishFlowMarkerArray){
+    //!!!
+    //ROS_WARN_STREAM("key: x :"<< (int)((*occupied_cells.begin())[0])-(int)((origin)[0])<<
+    //                "key: y :"<< (int)((*occupied_cells.begin())[1])-(int)((origin)[0])<<
+    //                "key: z :"<< (int)((*occupied_cells.begin())[2])-(int)((origin)[0])) ;
+    double size = m_octree->getNodeSize(m_treeDepth);
+    std_msgs::ColorRGBA col;
+    col.r=1;col.g=0;col.b=0;col.a=1;
+    
+    for (int i=0; i< 4096; i++) {
+      if (flowMap1[i].state>1){
+        geometry_msgs::Point cubeCenter;
+        geometry_msgs::Point cubeSpeed;
+        OcTreeKey k = OcTreeKey((i%16)+offsetx,(i/16)%16+offsety,(i/256)%16+offsetz);
+        octomap::point3d point = m_octree->keyToCoord(k);
+        cubeCenter.x = point.x()+flowMap1[i].x;
+        cubeCenter.y = point.y()+flowMap1[i].y;
+        cubeCenter.z = point.z()+flowMap1[i].z;
+        //cubeCenter.x = (i%16)*size;//+offsetx;
+        //cubeCenter.y = ((i/16)%16)*size;//+offsety;
+        //cubeCenter.z = ((i/256)%16)*size;//+offsetz;
+        flowNodesVis.markers[0].points.push_back(cubeCenter);
+        if (m_useHeightMap){
+          double minX, minY, minZ, maxX, maxY, maxZ;
+          m_octree->getMetricMin(minX, minY, minZ);
+          m_octree->getMetricMax(maxX, maxY, maxZ);
+
+          double h = (1.0 - std::min(std::max((cubeCenter.z-minZ)/ (maxZ - minZ), 0.0), 1.0)) *m_colorFactor;
+          flowNodesVis.markers[0].colors.push_back(heightMapColor(h));
+          flowNodesVis.markers[1].colors.push_back(col);
+        }
+        cubeSpeed.x = cubeCenter.x + flowMap1[i].xs*5;
+        cubeSpeed.y = cubeCenter.y + flowMap1[i].ys*5;
+        cubeSpeed.z = cubeCenter.z + flowMap1[i].zs*5;
+
+        flowNodesVis.markers[1].points.push_back(cubeSpeed);
+      }
+
+
+      
+
+
+    }
+    // finish flow
+    flowNodesVis.markers[0].header.frame_id = m_worldFrameId;
+    flowNodesVis.markers[0].header.stamp = rostime;
+    flowNodesVis.markers[0].ns = "map";
+    flowNodesVis.markers[0].id = 0;
+    flowNodesVis.markers[0].type = visualization_msgs::Marker::CUBE_LIST;
+    flowNodesVis.markers[0].scale.x = size;
+    flowNodesVis.markers[0].scale.y = size;
+    flowNodesVis.markers[0].scale.z = size;
+    flowNodesVis.markers[1].header.frame_id = m_worldFrameId;
+    flowNodesVis.markers[1].header.stamp = rostime;
+    flowNodesVis.markers[1].ns = "map";
+    flowNodesVis.markers[1].id = 1;
+    flowNodesVis.markers[1].type = visualization_msgs::Marker::CUBE_LIST;
+    flowNodesVis.markers[1].scale.x = size*0.7;
+    flowNodesVis.markers[1].scale.y = size*0.7;
+    flowNodesVis.markers[1].scale.z = size*0.7;
+    if (!m_useColoredMap)
+      flowNodesVis.markers[0].color = m_color;
+      flowNodesVis.markers[1].color = m_color;
+
+
+    if (flowNodesVis.markers[0].points.size() > 0)
+      flowNodesVis.markers[0].action = visualization_msgs::Marker::ADD;
+    else
+      flowNodesVis.markers[0].action = visualization_msgs::Marker::DELETE;
+    if (flowNodesVis.markers[1].points.size() > 0)
+      flowNodesVis.markers[1].action = visualization_msgs::Marker::ADD;
+    else
+      flowNodesVis.markers[1].action = visualization_msgs::Marker::DELETE;
+
+
+    m_flowPub.publish(flowNodesVis);
   }
 
   if (publishBinaryMap)
