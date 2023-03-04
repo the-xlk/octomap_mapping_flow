@@ -574,21 +574,22 @@ void OctomapServer::insertScan(const tf::Point& sensorOriginTf, const PCLPointCl
     if(x>=0 && y>=0 && z>=0 && x<16 && y<16 && z<16){
       PointWeight p = it->second;
       point3d pcell = m_octree->keyToCoord(it->first);
-      FlowCell prev = flowMap2[x+y*16+z*256];
+      FlowCell prev = flowMap1[x+y*16+z*256];
       if(prev.state>1){//correct
+        ROS_WARN("update");
         flowMap2[x+y*16+z*256]={2,
                     p.x/p.weight-pcell.x(),
                     p.y/p.weight-pcell.y(),
                     p.z/p.weight-pcell.z(),
-                    0.5f*prev.xs+0.5f*((p.x/p.weight-pcell.x())-prev.x),
-                    0.5f*prev.ys+0.5f*((p.y/p.weight-pcell.y())-prev.y),
-                    0.5f*prev.zs+0.5f*((p.z/p.weight-pcell.z())-prev.z)};
+                  0,//0.0f*prev.xs+0.0f*((p.x/p.weight-pcell.x())-prev.x),
+                  0,//0.0f*prev.ys+0.0f*((p.y/p.weight-pcell.y())-prev.y),
+                  0};//0.0f*prev.zs+0.0f*((p.z/p.weight-pcell.z())-prev.z)};
       }else{//"spawn"
         FlowCell kernel = {0,0,0,0,0,0,0};//count, totals
         for(int kx=std::max(0,x-2);kx<std::min(x+2,16);kx++){//kernel
           for(int ky=std::max(0,y-2);ky<std::min(y+2,16);ky++){
             for(int kz=std::max(0,z-2);kz<std::min(z+2,16);kz++){
-              prev = flowMap2[kx+(ky)*16+(kz)*256];
+              prev = flowMap1[kx+(ky)*16+(kz)*256];
               if(prev.state>1){
                 kernel = {kernel.state+1,
                           kernel.x+prev.x+(kx-x)*size,
@@ -606,9 +607,9 @@ void OctomapServer::insertScan(const tf::Point& sensorOriginTf, const PCLPointCl
                   p.x/p.weight-pcell.x(),//viewed pose
                   p.y/p.weight-pcell.y(),
                   p.z/p.weight-pcell.z(),
-                  0.5f*kernel.xs/count+0.5f*((p.x/p.weight-pcell.x())-kernel.x/count),//average delta pose and prev-velocity
-                  0.5f*kernel.ys/count+0.5f*((p.y/p.weight-pcell.y())-kernel.y/count),
-                  0.5f*kernel.zs/count+0.5f*((p.z/p.weight-pcell.z())-kernel.z/count)};
+                  0.0f*kernel.xs/count+1.0f*((p.x/p.weight-pcell.x())-kernel.x/count),//average delta pose and prev-velocity
+                  0.0f*kernel.ys/count+1.0f*((p.y/p.weight-pcell.y())-kernel.y/count),
+                  0.0f*kernel.zs/count+1.0f*((p.z/p.weight-pcell.z())-kernel.z/count)};
         flowMap2[x+y*16+z*256]=kernel;
       }
       //flowMap2[x+y*16+z*256]={2,p.x/p.weight-pcell.x(),p.y/p.weight-pcell.y(),p.z/p.weight-pcell.z(),0,0,0};
@@ -926,9 +927,9 @@ void OctomapServer::publishAll(const ros::Time& rostime){
         geometry_msgs::Point cubeSpeed;
         OcTreeKey k = OcTreeKey((i%16)+offsetx,(i/16)%16+offsety,(i/256)%16+offsetz);
         octomap::point3d point = m_octree->keyToCoord(k);
-        cubeCenter.x = point.x()+flowMap1[i].x;
-        cubeCenter.y = point.y()+flowMap1[i].y;
-        cubeCenter.z = point.z()+flowMap1[i].z;
+        cubeCenter.x = point.x();//+flowMap1[i].x;
+        cubeCenter.y = point.y();//+flowMap1[i].y;
+        cubeCenter.z = point.z();//+flowMap1[i].z;
         //cubeCenter.x = (i%16)*size;//+offsetx;
         //cubeCenter.y = ((i/16)%16)*size;//+offsety;
         //cubeCenter.z = ((i/256)%16)*size;//+offsetz;
@@ -942,9 +943,9 @@ void OctomapServer::publishAll(const ros::Time& rostime){
           flowNodesVis.markers[0].colors.push_back(heightMapColor(h));
           flowNodesVis.markers[1].colors.push_back(col);
         }
-        cubeSpeed.x = cubeCenter.x + flowMap1[i].xs*5;
-        cubeSpeed.y = cubeCenter.y + flowMap1[i].ys*5;
-        cubeSpeed.z = cubeCenter.z + flowMap1[i].zs*5;
+        cubeSpeed.x = point.x() + flowMap1[i].xs*10;
+        cubeSpeed.y = point.y() + flowMap1[i].ys*10;
+        cubeSpeed.z = point.z() + flowMap1[i].zs*10;
 
         flowNodesVis.markers[1].points.push_back(cubeSpeed);
       }
@@ -968,9 +969,9 @@ void OctomapServer::publishAll(const ros::Time& rostime){
     flowNodesVis.markers[1].ns = "map";
     flowNodesVis.markers[1].id = 1;
     flowNodesVis.markers[1].type = visualization_msgs::Marker::CUBE_LIST;
-    flowNodesVis.markers[1].scale.x = size*0.7;
-    flowNodesVis.markers[1].scale.y = size*0.7;
-    flowNodesVis.markers[1].scale.z = size*0.7;
+    flowNodesVis.markers[1].scale.x = size*0.9;
+    flowNodesVis.markers[1].scale.y = size*0.9;
+    flowNodesVis.markers[1].scale.z = size*0.9;
     if (!m_useColoredMap)
       flowNodesVis.markers[0].color = m_color;
       flowNodesVis.markers[1].color = m_color;
