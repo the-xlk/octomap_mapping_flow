@@ -524,25 +524,44 @@ void OctomapServer::insertScan(const tf::Point& sensorOriginTf, const PCLPointCl
   //ROS_WARN("offset: %d %d %d", deltaOffsetx,deltaOffsety,deltaOffsetz);
         
 
-
+  bool ocupied; 
+  octomap::OcTreeNode * node;
   
   for(int x=0; x<16; x++){ //scroll onto flowmap2
     if(x<deltaOffsetx || x>=16+deltaOffsetx){//clipped by scroll
       for(int y=0; y<16; y++){
         for(int z=0; z<16; z++){
-          flowMap2[x+y*16+z*256]={1,0,0,0,0,0,0};
+          node=m_octree->search(octomap::OcTreeKey(x+newOffsetx,y+newOffsety,z+newOffsetz));
+          if(node == NULL){
+            flowMap2[x+y*16+z*256]={1,0,0,0,0,0,0};
+            continue;
+          }
+          ocupied = m_octree->isNodeOccupied(node);
+          flowMap2[x+y*16+z*256]={ocupied? 2 : 0,0,0,0,0,0,0};
         }
       }
     }else{
       for(int y=0; y<16; y++){
         if(y<deltaOffsety || y>=16+deltaOffsety){//clipped by scroll
           for(int z=0; z<16; z++){
-            flowMap2[x+y*16+z*256]={1,0,0,0,0,0,0};
-          }
+            node=m_octree->search(octomap::OcTreeKey(x+newOffsetx,y+newOffsety,z+newOffsetz));
+            if(node == NULL){
+              flowMap2[x+y*16+z*256]={1,0,0,0,0,0,0};
+              continue;
+            }
+            ocupied = m_octree->isNodeOccupied(node);
+            flowMap2[x+y*16+z*256]={ocupied? 2 : 0,0,0,0,0,0,0};
+            }
        }else{
           for(int z=0; z<16; z++){
             if(z<deltaOffsetz || z>=16+deltaOffsetz){//clipped by scroll
-              flowMap2[x+y*16+z*256]={1,0,0,0,0,0,0};
+              node=m_octree->search(octomap::OcTreeKey(x+newOffsetx,y+newOffsety,z+newOffsetz));
+              if(node == NULL){
+                flowMap2[x+y*16+z*256]={1,0,0,0,0,0,0};
+                continue;
+              }
+              ocupied = m_octree->isNodeOccupied(node);
+              flowMap2[x+y*16+z*256]={ocupied? 2 : 0,0,0,0,0,0,0};
             }else{//scroll
               flowMap2[x+y*16+z*256]=flowMap1[x-deltaOffsetx+(y-deltaOffsety)*16+(z-deltaOffsetz)*256];
             }
