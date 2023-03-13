@@ -526,23 +526,19 @@ void OctomapServer::insertScan(const tf::Point& sensorOriginTf, const PCLPointCl
 
   bool ocupied; 
   octomap::OcTreeNode * node;
-  
-  for(int x=0; x<16; x++){ //scroll onto flowmap2
-    if(x<deltaOffsetx || x>=16+deltaOffsetx){//clipped by scroll
-      for(int y=0; y<16; y++){
-        for(int z=0; z<16; z++){
-          node=m_octree->search(octomap::OcTreeKey(x+newOffsetx,y+newOffsety,z+newOffsetz));
-          if(node == NULL){
-            flowMap2[x+y*16+z*256]={1,0,0,0,0,0,0};
-            continue;
-          }
-          ocupied = m_octree->isNodeOccupied(node);
-          flowMap2[x+y*16+z*256]={ocupied? 2 : 0,0,0,0,0,0,0};
-        }
-      }
-    }else{
-      for(int y=0; y<16; y++){
-        if(y<deltaOffsety || y>=16+deltaOffsety){//clipped by scroll
+
+  if(deltaOffsetx!=0 || deltaOffsety!=0 || deltaOffsetz!=0){
+    //swap buffers
+
+    FlowCell * swap = flowMap1;
+    flowMap1 = flowMap2;
+    flowMap2 = swap;
+
+    //scroll
+
+    for(int x=0; x<16; x++){ //scroll onto flowmap2
+      if(x<deltaOffsetx || x>=16+deltaOffsetx){//clipped by scroll
+        for(int y=0; y<16; y++){
           for(int z=0; z<16; z++){
             node=m_octree->search(octomap::OcTreeKey(x+newOffsetx,y+newOffsety,z+newOffsetz));
             if(node == NULL){
@@ -551,10 +547,12 @@ void OctomapServer::insertScan(const tf::Point& sensorOriginTf, const PCLPointCl
             }
             ocupied = m_octree->isNodeOccupied(node);
             flowMap2[x+y*16+z*256]={ocupied? 2 : 0,0,0,0,0,0,0};
-            }
-       }else{
-          for(int z=0; z<16; z++){
-            if(z<deltaOffsetz || z>=16+deltaOffsetz){//clipped by scroll
+          }
+        }
+      }else{
+        for(int y=0; y<16; y++){
+          if(y<deltaOffsety || y>=16+deltaOffsety){//clipped by scroll
+            for(int z=0; z<16; z++){
               node=m_octree->search(octomap::OcTreeKey(x+newOffsetx,y+newOffsety,z+newOffsetz));
               if(node == NULL){
                 flowMap2[x+y*16+z*256]={1,0,0,0,0,0,0};
@@ -562,14 +560,28 @@ void OctomapServer::insertScan(const tf::Point& sensorOriginTf, const PCLPointCl
               }
               ocupied = m_octree->isNodeOccupied(node);
               flowMap2[x+y*16+z*256]={ocupied? 2 : 0,0,0,0,0,0,0};
-            }else{//scroll
-              flowMap2[x+y*16+z*256]=flowMap1[x-deltaOffsetx+(y-deltaOffsety)*16+(z-deltaOffsetz)*256];
+              }
+        }else{
+            for(int z=0; z<16; z++){
+              if(z<deltaOffsetz || z>=16+deltaOffsetz){//clipped by scroll
+                node=m_octree->search(octomap::OcTreeKey(x+newOffsetx,y+newOffsety,z+newOffsetz));
+                if(node == NULL){
+                  flowMap2[x+y*16+z*256]={1,0,0,0,0,0,0};
+                  continue;
+                }
+                ocupied = m_octree->isNodeOccupied(node);
+                flowMap2[x+y*16+z*256]={ocupied? 2 : 0,0,0,0,0,0,0};
+              }else{//scroll
+                flowMap2[x+y*16+z*256]=flowMap1[x-deltaOffsetx+(y-deltaOffsety)*16+(z-deltaOffsetz)*256];
+              }
             }
           }
         }
       }
     }
   }
+  
+  
 
 //flowmap2 scrolled, flowmap1 unscrolled
 
@@ -642,12 +654,6 @@ void OctomapServer::insertScan(const tf::Point& sensorOriginTf, const PCLPointCl
       }
     }
   }
-
-  //swap buffers
-  
-  FlowCell * swap = flowMap1;
-  flowMap1 = flowMap2;
-  flowMap2 = swap;
   
 }
 
@@ -948,14 +954,14 @@ void OctomapServer::publishAll(const ros::Time& rostime){
     col.r=1;col.g=0;col.b=0;col.a=1;
     
     for (int i=0; i< 4096; i++) {
-      if (flowMap1[i].state>1){
+      if (flowMap2[i].state>1){
         geometry_msgs::Point cubeCenter;
         geometry_msgs::Point cubeSpeed;
         OcTreeKey k = OcTreeKey((i%16)+offsetx,(i/16)%16+offsety,(i/256)%16+offsetz);
         octomap::point3d point = m_octree->keyToCoord(k);
-        cubeCenter.x = point.x()+flowMap1[i].x;
-        cubeCenter.y = point.y()+flowMap1[i].y;
-        cubeCenter.z = point.z()+flowMap1[i].z;
+        cubeCenter.x = point.x()+flowMap2[i].x;
+        cubeCenter.y = point.y()+flowMap2[i].y;
+        cubeCenter.z = point.z()+flowMap2[i].z;
         //cubeCenter.x = (i%16)*size;//+offsetx;
         //cubeCenter.y = ((i/16)%16)*size;//+offsety;
         //cubeCenter.z = ((i/256)%16)*size;//+offsetz;
@@ -969,9 +975,9 @@ void OctomapServer::publishAll(const ros::Time& rostime){
           flowNodesVis.markers[0].colors.push_back(heightMapColor(h));
           flowNodesVis.markers[1].colors.push_back(col);
         }
-        cubeSpeed.x = point.x() +flowMap1[i].x + flowMap1[i].xs*5;
-        cubeSpeed.y = point.y() +flowMap1[i].y + flowMap1[i].ys*5;
-        cubeSpeed.z = point.z() +flowMap1[i].z + flowMap1[i].zs*5;
+        cubeSpeed.x = point.x() +flowMap2[i].x + flowMap2[i].xs*5;
+        cubeSpeed.y = point.y() +flowMap2[i].y + flowMap2[i].ys*5;
+        cubeSpeed.z = point.z() +flowMap2[i].z + flowMap2[i].zs*5;
 
         flowNodesVis.markers[1].points.push_back(cubeSpeed);
       }
