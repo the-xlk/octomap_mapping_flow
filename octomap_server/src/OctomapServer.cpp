@@ -546,7 +546,7 @@ void OctomapServer::insertScan(const tf::Point& sensorOriginTf, const PCLPointCl
               continue;
             }
             ocupied = m_octree->isNodeOccupied(node);
-            flowMap2[x+y*16+z*256]={ocupied? 2 : 0,0,0,0,0,0,0};
+            flowMap2[x+y*16+z*256]={ocupied? 3 : 0,0,0,0,0,0,0};
           }
         }
       }else{
@@ -559,7 +559,7 @@ void OctomapServer::insertScan(const tf::Point& sensorOriginTf, const PCLPointCl
                 continue;
               }
               ocupied = m_octree->isNodeOccupied(node);
-              flowMap2[x+y*16+z*256]={ocupied? 2 : 0,0,0,0,0,0,0};
+              flowMap2[x+y*16+z*256]={ocupied? 3 : 0,0,0,0,0,0,0};
               }
         }else{
             for(int z=0; z<16; z++){
@@ -570,7 +570,7 @@ void OctomapServer::insertScan(const tf::Point& sensorOriginTf, const PCLPointCl
                   continue;
                 }
                 ocupied = m_octree->isNodeOccupied(node);
-                flowMap2[x+y*16+z*256]={ocupied? 2 : 0,0,0,0,0,0,0};
+                flowMap2[x+y*16+z*256]={ocupied? 3 : 0,0,0,0,0,0,0};
               }else{//scroll
                 flowMap2[x+y*16+z*256]=flowMap1[x-deltaOffsetx+(y-deltaOffsety)*16+(z-deltaOffsetz)*256];
               }
@@ -590,6 +590,8 @@ void OctomapServer::insertScan(const tf::Point& sensorOriginTf, const PCLPointCl
   offsetz=newOffsetz;
   
   double size = m_octree->getNodeSize(m_maxTreeDepth);
+  FlowCell prev;
+  FlowCell constructed;
 
   for (auto it = occupiedFloatingCells.begin(), end=occupiedFloatingCells.end(); it!= end; it++) {
     int x = (int)(it->first)[0]-newOffsetx;
@@ -599,44 +601,64 @@ void OctomapServer::insertScan(const tf::Point& sensorOriginTf, const PCLPointCl
     if(x>=0 && y>=0 && z>=0 && x<16 && y<16 && z<16){
       PointWeight p = it->second;
       point3d pcell = m_octree->keyToCoord(it->first);
-      FlowCell prev = flowMap2[x+y*16+z*256];
-      if(prev.state>1){//correct
+      prev = flowMap2[x+y*16+z*256];
+      if(prev.state>2){//correct if loaded from map or seen
         //ROS_WARN("update");
-        flowMap2[x+y*16+z*256]={2,
+        constructed = {4, //seen
                     p.x/p.weight-pcell.x(),
                     p.y/p.weight-pcell.y(),
                     p.z/p.weight-pcell.z(),
                   0.5f*prev.xs+0.5f*((p.x/p.weight-pcell.x())-prev.x),
                   0.5f*prev.ys+0.5f*((p.y/p.weight-pcell.y())-prev.y),
                   0.5f*prev.zs+0.5f*((p.z/p.weight-pcell.z())-prev.z)};
+        flowMap2[x+y*16+z*256]=constructed;
       }else{//"spawn"
-        FlowCell kernel = {0,0,0,0,0,0,0};//count, totals
+        constructed = {0,0,0,0,0,0,0};//count, totals
         for(int kx=std::max(0,x-2);kx<std::min(x+2,16);kx++){//kernel
           for(int ky=std::max(0,y-2);ky<std::min(y+2,16);ky++){
             for(int kz=std::max(0,z-2);kz<std::min(z+2,16);kz++){
               prev = flowMap2[kx+(ky)*16+(kz)*256];
-              if(prev.state>1){
-                kernel = {kernel.state+1,
-                          kernel.x+prev.x+(kx-x)*size,
-                          kernel.y+prev.y+(ky-y)*size,
-                          kernel.z+prev.z+(kz-z)*size,
-                          kernel.xs+prev.xs,
-                          kernel.ys+prev.ys,
-                          kernel.zs+prev.zs};
+              if(prev.state>2){ //ignore predicted ocupancy, what about map loaded cells?
+                constructed = {constructed.state+1,
+                              constructed.x+prev.x+(kx-x)*size,
+                              constructed.y+prev.y+(ky-y)*size,
+                              constructed.z+prev.z+(kz-z)*size,
+                              constructed.xs+prev.xs,
+                              constructed.ys+prev.ys,
+                              constructed.zs+prev.zs};
               }
             }
           }
         }
-        float count =std::max(1,kernel.state);
-        kernel = {2,
+        float count =std::max(1,constructed.state);
+        constructed = {4, //seen
                   p.x/p.weight-pcell.x(),//viewed pose
                   p.y/p.weight-pcell.y(),
                   p.z/p.weight-pcell.z(),
-                  0.5f*kernel.xs/count+0.2f*((p.x/p.weight-pcell.x())-kernel.x/count),//average delta pose and prev-velocity
-                  0.5f*kernel.ys/count+0.2f*((p.y/p.weight-pcell.y())-kernel.y/count),//first part is acceptable, second overshoots
-                  0.5f*kernel.zs/count+0.2f*((p.z/p.weight-pcell.z())-kernel.z/count)};
-        flowMap2[x+y*16+z*256]=kernel;
+                  0.5f*constructed.xs/count+0.2f*((p.x/p.weight-pcell.x())-constructed.x/count),//average delta pose and prev-velocity
+                  0.5f*constructed.ys/count+0.2f*((p.y/p.weight-pcell.y())-constructed.y/count),//first part is acceptable, second overshoots
+                  0.5f*constructed.zs/count+0.2f*((p.z/p.weight-pcell.z())-constructed.z/count)};
+        flowMap2[x+y*16+z*256]=constructed;
       }
+
+      if(constructed.xs*constructed.xs+constructed.ys*constructed.ys+constructed.zs*constructed.zs>0.1f){
+        int dx,dy,dz;
+        dx=std::round((constructed.x+constructed.xs*10)/size);
+        dy=std::round((constructed.y+constructed.ys*10)/size);
+        dz=std::round((constructed.z+constructed.zs*10)/size);
+        prev = flowMap2[x+dx+(y+dy)*16+(z+dz)*256];
+        if(prev.state<3){
+          flowMap2[x+dx+(y+dy)*16+(z+dz)*256]=
+            {constructed.state, //seen
+            constructed.x+constructed.xs*10-size*dx,
+            constructed.y+constructed.ys*10-size*dy,
+            constructed.z+constructed.zs*10-size*dz,
+            0,
+            0,
+            0};
+        }
+      }
+
       //flowMap2[x+y*16+z*256]={2,p.x/p.weight-pcell.x(),p.y/p.weight-pcell.y(),p.z/p.weight-pcell.z(),0,0,0};
     }
   }

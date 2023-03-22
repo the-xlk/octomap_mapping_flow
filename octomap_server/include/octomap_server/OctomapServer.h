@@ -222,7 +222,7 @@ protected:
   //!!!
   octomap::KeySet free_cells;//, occupied_cells;
   struct FlowCell{            // Structure declaration
-    int state;        // 0:clear ; 1:unseen ; 2:seen ; 3:seen+moving
+    int state;        // 0:clear ; 1:unseen ; 2:predicted ; 3:map ; 4 seen
     float x;          //offset
     float y;
     float z;
