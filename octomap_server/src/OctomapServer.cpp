@@ -656,6 +656,7 @@ void OctomapServer::insertScan(const tf::Point& sensorOriginTf, const PCLPointCl
             0,
             0,
             0};
+          m_octree->setNodeValue(octomap::OcTreeKey(x+newOffsetx+dx,y+newOffsety+dy,z+newOffsetz+dz), 1.0);
         }
       }
 
