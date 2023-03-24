@@ -640,24 +640,31 @@ void OctomapServer::insertScan(const tf::Point& sensorOriginTf, const PCLPointCl
                   0.5f*constructed.zs/count+0.2f*((p.z/p.weight-pcell.z())-constructed.z/count)};
         flowMap2[x+y*16+z*256]=constructed;
       }
-
-      if(constructed.xs*constructed.xs+constructed.ys*constructed.ys+constructed.zs*constructed.zs>0.1f){
+      if(constructed.xs*constructed.xs+constructed.ys*constructed.ys+constructed.zs*constructed.zs>0.002f){
         int dx,dy,dz;
-        dx=std::round((constructed.x+constructed.xs*10)/size);
-        dy=std::round((constructed.y+constructed.ys*10)/size);
-        dz=std::round((constructed.z+constructed.zs*10)/size);
-        prev = flowMap2[x+dx+(y+dy)*16+(z+dz)*256];
-        if(prev.state<3){
-          flowMap2[x+dx+(y+dy)*16+(z+dz)*256]=
-            {constructed.state, //seen
-            constructed.x+constructed.xs*10-size*dx,
-            constructed.y+constructed.ys*10-size*dy,
-            constructed.z+constructed.zs*10-size*dz,
-            0,
-            0,
-            0};
-          m_octree->setNodeValue(octomap::OcTreeKey(x+newOffsetx+dx,y+newOffsety+dy,z+newOffsetz+dz), 1.0);
+        dx=std::round((constructed.x+constructed.xs*5)/size);
+        dy=std::round((constructed.y+constructed.ys*5)/size);
+        dz=std::round((constructed.z+constructed.zs*5)/size);
+        ROS_WARN_STREAM("movement: " << (constructed.xs*constructed.xs+constructed.ys*constructed.ys+constructed.zs*constructed.zs)<<
+                        " dx: " << dx << " dy: " << dy << " dz: " << dz);
+        x+=dx;y+=dy;z+=dz;
+        if(x>=0 && y>=0 && z>=0 && x<16 && y<16 && z<16){
+          ROS_WARN("in volume");
+          prev = flowMap2[x+y*16+z*256];
+          if(prev.state<3){
+            ROS_WARN("writting");
+            flowMap2[x+y*16+z*256]=
+              {2, //seen
+              constructed.x+constructed.xs*5-size*dx,
+              constructed.y+constructed.ys*5-size*dy,
+              constructed.z+constructed.zs*5-size*dz,
+              0,
+              0,
+              0};
+              ROS_WARN("finished writting");
+          }
         }
+        m_octree->setNodeValue(octomap::OcTreeKey(x+newOffsetx+dx,y+newOffsety+dy,z+newOffsetz+dz), 1.0);
       }
 
       //flowMap2[x+y*16+z*256]={2,p.x/p.weight-pcell.x(),p.y/p.weight-pcell.y(),p.z/p.weight-pcell.z(),0,0,0};
@@ -977,7 +984,7 @@ void OctomapServer::publishAll(const ros::Time& rostime){
     col.r=1;col.g=0;col.b=0;col.a=1;
     
     for (int i=0; i< 4096; i++) {
-      if (flowMap2[i].state>1){
+      if (flowMap2[i].state>2){
         geometry_msgs::Point cubeCenter;
         geometry_msgs::Point cubeSpeed;
         OcTreeKey k = OcTreeKey((i%16)+offsetx,(i/16)%16+offsety,(i/256)%16+offsetz);
@@ -996,13 +1003,20 @@ void OctomapServer::publishAll(const ros::Time& rostime){
 
           double h = (1.0 - std::min(std::max((cubeCenter.z-minZ)/ (maxZ - minZ), 0.0), 1.0)) *m_colorFactor;
           flowNodesVis.markers[0].colors.push_back(heightMapColor(h));
-          flowNodesVis.markers[1].colors.push_back(col);
         }
-        cubeSpeed.x = point.x() +flowMap2[i].x + flowMap2[i].xs*5;
-        cubeSpeed.y = point.y() +flowMap2[i].y + flowMap2[i].ys*5;
-        cubeSpeed.z = point.z() +flowMap2[i].z + flowMap2[i].zs*5;
-
-        flowNodesVis.markers[1].points.push_back(cubeSpeed);
+      }else if(flowMap2[i].state==2){
+        geometry_msgs::Point cubeCenter;
+        geometry_msgs::Point cubeSpeed;
+        OcTreeKey k = OcTreeKey((i%16)+offsetx,(i/16)%16+offsety,(i/256)%16+offsetz);
+        octomap::point3d point = m_octree->keyToCoord(k);
+        cubeCenter.x = point.x()+flowMap2[i].x;
+        cubeCenter.y = point.y()+flowMap2[i].y;
+        cubeCenter.z = point.z()+flowMap2[i].z;
+        //cubeCenter.x = (i%16)*size;//+offsetx;
+        //cubeCenter.y = ((i/16)%16)*size;//+offsety;
+        //cubeCenter.z = ((i/256)%16)*size;//+offsetz;
+        flowNodesVis.markers[1].points.push_back(cubeCenter);
+        flowNodesVis.markers[1].colors.push_back(col);
       }
 
 
@@ -1024,9 +1038,9 @@ void OctomapServer::publishAll(const ros::Time& rostime){
     flowNodesVis.markers[1].ns = "map";
     flowNodesVis.markers[1].id = 1;
     flowNodesVis.markers[1].type = visualization_msgs::Marker::CUBE_LIST;
-    flowNodesVis.markers[1].scale.x = size*0.75;
-    flowNodesVis.markers[1].scale.y = size*0.75;
-    flowNodesVis.markers[1].scale.z = size*0.75;
+    flowNodesVis.markers[1].scale.x = size;
+    flowNodesVis.markers[1].scale.y = size;
+    flowNodesVis.markers[1].scale.z = size;
     if (!m_useColoredMap)
       flowNodesVis.markers[0].color = m_color;
       flowNodesVis.markers[1].color = m_color;
