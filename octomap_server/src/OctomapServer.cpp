@@ -37,6 +37,10 @@ bool is_equal (double a, double b, double epsilon = 1.0e-7)
     return std::abs(a - b) < epsilon;
 }
 
+template <typename T> int sgn(T val) {
+    return (T(0) < val) - (val < T(0));
+}
+
 namespace octomap_server{
 
 OctomapServer::OctomapServer(const ros::NodeHandle private_nh_, const ros::NodeHandle &nh_)
@@ -592,6 +596,7 @@ void OctomapServer::insertScan(const tf::Point& sensorOriginTf, const PCLPointCl
   double size = m_octree->getNodeSize(m_maxTreeDepth);
   FlowCell prev;
   FlowCell constructed;
+  movedCells.clear();
 
   for (auto it = occupiedFloatingCells.begin(), end=occupiedFloatingCells.end(); it!= end; it++) {
     int x = (int)(it->first)[0]-newOffsetx;
@@ -608,9 +613,9 @@ void OctomapServer::insertScan(const tf::Point& sensorOriginTf, const PCLPointCl
                     p.x/p.weight-pcell.x(),
                     p.y/p.weight-pcell.y(),
                     p.z/p.weight-pcell.z(),
-                  0.5f*prev.xs+0.5f*((p.x/p.weight-pcell.x())-prev.x),
-                  0.5f*prev.ys+0.5f*((p.y/p.weight-pcell.y())-prev.y),
-                  0.5f*prev.zs+0.5f*((p.z/p.weight-pcell.z())-prev.z)};
+                  0.7f*prev.xs+0.3f*((p.x/p.weight-pcell.x())-prev.x),
+                  0.7f*prev.ys+0.3f*((p.y/p.weight-pcell.y())-prev.y),
+                  0.7f*prev.zs+0.3f*((p.z/p.weight-pcell.z())-prev.z)};
         flowMap2[x+y*16+z*256]=constructed;
       }else{//"spawn"
         constructed = {0,0,0,0,0,0,0};//count, totals
@@ -619,10 +624,13 @@ void OctomapServer::insertScan(const tf::Point& sensorOriginTf, const PCLPointCl
             for(int kz=std::max(0,z-2);kz<std::min(z+2,16);kz++){
               prev = flowMap2[kx+(ky)*16+(kz)*256];
               if(prev.state>2){ //ignore predicted ocupancy, what about map loaded cells?
+                int dx = kx-x;
+                int dy = ky-y;
+                int dz = kz-z;
                 constructed = {constructed.state+1,
-                              constructed.x+prev.x+(kx-x)*size,
-                              constructed.y+prev.y+(ky-y)*size,
-                              constructed.z+prev.z+(kz-z)*size,
+                              constructed.x+prev.x+((dx-0.5*sgn(dx)))*size,
+                              constructed.y+prev.y+((dy-0.5*sgn(dy)))*size,
+                              constructed.z+prev.z+((dz-0.5*sgn(dz)))*size,
                               constructed.xs+prev.xs,
                               constructed.ys+prev.ys,
                               constructed.zs+prev.zs};
@@ -631,42 +639,19 @@ void OctomapServer::insertScan(const tf::Point& sensorOriginTf, const PCLPointCl
           }
         }
         float count =std::max(1,constructed.state);
-        constructed = {4, //seen
+        constructed = {5, //kernel
                   p.x/p.weight-pcell.x(),//viewed pose
                   p.y/p.weight-pcell.y(),
                   p.z/p.weight-pcell.z(),
-                  0.5f*constructed.xs/count+0.2f*((p.x/p.weight-pcell.x())-constructed.x/count),//average delta pose and prev-velocity
-                  0.5f*constructed.ys/count+0.2f*((p.y/p.weight-pcell.y())-constructed.y/count),//first part is acceptable, second overshoots
-                  0.5f*constructed.zs/count+0.2f*((p.z/p.weight-pcell.z())-constructed.z/count)};
+                  0.5f*constructed.xs/count+0.5f*((p.x/p.weight-pcell.x())-constructed.x/count),//average delta pose and prev-velocity
+                  0.5f*constructed.ys/count+0.5f*((p.y/p.weight-pcell.y())-constructed.y/count),//first part is acceptable, second overshoots
+                  0.5f*constructed.zs/count+0.5f*((p.z/p.weight-pcell.z())-constructed.z/count)};
         flowMap2[x+y*16+z*256]=constructed;
-      }
-      if(constructed.xs*constructed.xs+constructed.ys*constructed.ys+constructed.zs*constructed.zs>0.002f){
-        int dx,dy,dz;
-        dx=std::round((constructed.x+constructed.xs*5)/size);
-        dy=std::round((constructed.y+constructed.ys*5)/size);
-        dz=std::round((constructed.z+constructed.zs*5)/size);
-        ROS_WARN_STREAM("movement: " << (constructed.xs*constructed.xs+constructed.ys*constructed.ys+constructed.zs*constructed.zs)<<
-                        " dx: " << dx << " dy: " << dy << " dz: " << dz);
-        x+=dx;y+=dy;z+=dz;
-        if(x>=0 && y>=0 && z>=0 && x<16 && y<16 && z<16){
-          ROS_WARN("in volume");
-          prev = flowMap2[x+y*16+z*256];
-          if(prev.state<3){
-            ROS_WARN("writting");
-            flowMap2[x+y*16+z*256]=
-              {2, //seen
-              constructed.x+constructed.xs*5-size*dx,
-              constructed.y+constructed.ys*5-size*dy,
-              constructed.z+constructed.zs*5-size*dz,
-              0,
-              0,
-              0};
-              ROS_WARN("finished writting");
-          }
+        //moved between cells:
+        if(constructed.xs*constructed.xs+constructed.ys*constructed.ys+constructed.zs*constructed.zs>0.003f){
+          movedCells.insert(x+y*16+z*256);
         }
-        m_octree->setNodeValue(octomap::OcTreeKey(x+newOffsetx+dx,y+newOffsety+dy,z+newOffsetz+dz), 1.0);
       }
-
       //flowMap2[x+y*16+z*256]={2,p.x/p.weight-pcell.x(),p.y/p.weight-pcell.y(),p.z/p.weight-pcell.z(),0,0,0};
     }
   }
@@ -684,7 +669,53 @@ void OctomapServer::insertScan(const tf::Point& sensorOriginTf, const PCLPointCl
       }
     }
   }
-  
+
+  //predict
+  int dx,dy,dz,x,y,z;
+  for (auto cell: movedCells) {
+    x=cell%16;y=(cell/16)%16;z=(cell/256);
+    constructed=flowMap2[cell];
+    dx=std::round((constructed.x+constructed.xs*2)/size);
+    dy=std::round((constructed.y+constructed.ys*2)/size);
+    dz=std::round((constructed.z+constructed.zs*2)/size);
+    ROS_WARN_STREAM("movement: " << (constructed.xs*constructed.xs+constructed.ys*constructed.ys+constructed.zs*constructed.zs)<<
+                    " dx: " << dx << " dy: " << dy << " dz: " << dz);
+    x+=dx;y+=dy;z+=dz;
+    if(x>=0 && y>=0 && z>=0 && x<16 && y<16 && z<16){
+      //ROS_WARN("in volume");
+      prev = flowMap2[x+y*16+z*256];
+      if(prev.state<3){
+        //ROS_WARN("writting");
+        flowMap2[x+y*16+z*256]=
+          {2, //predicted
+          constructed.x+constructed.xs*2-size*dx,
+          constructed.y+constructed.ys*2-size*dy,
+          constructed.z+constructed.zs*2-size*dz,
+          0,
+          0,
+          0};
+          //ROS_WARN("finished writting");
+      }
+    }
+    x+=dx;y+=dy;z+=dz;
+    if(x>=0 && y>=0 && z>=0 && x<16 && y<16 && z<16){
+      //ROS_WARN("in volume");
+      prev = flowMap2[x+y*16+z*256];
+      if(prev.state<3){
+        //ROS_WARN("writting");
+        flowMap2[x+y*16+z*256]=
+          {2, //seen
+          constructed.x+constructed.xs*4-size*dx,
+          constructed.y+constructed.ys*4-size*dy,
+          constructed.z+constructed.zs*4-size*dz,
+          0,
+          0,
+          0};
+          //ROS_WARN("finished writting");
+      }
+    }
+    m_octree->setNodeValue(octomap::OcTreeKey(x+newOffsetx+dx,y+newOffsety+dy,z+newOffsetz+dz), 1.0);
+  }  
 }
 
 void OctomapServer::publishProjected2DMap(const ros::Time& rostime) {

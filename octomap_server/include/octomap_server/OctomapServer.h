@@ -222,7 +222,7 @@ protected:
   //!!!
   octomap::KeySet free_cells;//, occupied_cells;
   struct FlowCell{            // Structure declaration
-    int state;        // 0:clear ; 1:unseen ; 2:predicted ; 3:map ; 4 seen
+    int state;        // 0:clear ; 1:unseen ; 2:predicted ; 3:map ; 4 seen ; 5:kernel
     float x;          //offset
     float y;
     float z;
@@ -239,6 +239,8 @@ protected:
   std::tr1::unordered_map<octomap::OcTreeKey, PointWeight,octomap::OcTreeKey::KeyHash> occupiedFloatingCells;
   //std::tr1::unordered_map<octomap::OcTreeKey, PointWeight> occupiedFloatingCells;
   //hash<octomap::OcTreeKey>{} octomap::OcTreeKey::KeyHash(p.first); 
+
+  std::tr1::unordered_set<int> movedCells;
 
   FlowCell b1[4096];//16^3
   FlowCell b2[4096];//16^3
