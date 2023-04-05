@@ -197,7 +197,7 @@ OctomapServer::OctomapServer(const ros::NodeHandle private_nh_, const ros::NodeH
   m_reconfigureServer.setCallback(f);
 
   //!!! Initialize flowmap
-  for(int i=0; i<4096; i++){
+  for(int i=0; i<FLOW_GRID_L3; i++){
     flowMap1[i]={1,0,0,0,0,0,0};
     flowMap2[i]={1,0,0,0,0,0,0};
   }
@@ -540,43 +540,43 @@ void OctomapServer::insertScan(const tf::Point& sensorOriginTf, const PCLPointCl
 
     //scroll
 
-    for(int x=0; x<16; x++){ //scroll onto flowmap2
-      if(x<deltaOffsetx || x>=16+deltaOffsetx){//clipped by scroll
-        for(int y=0; y<16; y++){
-          for(int z=0; z<16; z++){
+    for(int x=0; x<FLOW_GRID_L; x++){ //scroll onto flowmap2
+      if(x<deltaOffsetx || x>=FLOW_GRID_L+deltaOffsetx){//clipped by scroll
+        for(int y=0; y<FLOW_GRID_L; y++){
+          for(int z=0; z<FLOW_GRID_L; z++){
             node=m_octree->search(octomap::OcTreeKey(x+newOffsetx,y+newOffsety,z+newOffsetz));
             if(node == NULL){
-              flowMap2[x+y*16+z*256]={1,0,0,0,0,0,0};
+              flowMap2[x+y*FLOW_GRID_L+z*FLOW_GRID_L2]={1,0,0,0,0,0,0};
               continue;
             }
             ocupied = m_octree->isNodeOccupied(node);
-            flowMap2[x+y*16+z*256]={ocupied? 3 : 0,0,0,0,0,0,0};
+            flowMap2[x+y*FLOW_GRID_L+z*FLOW_GRID_L2]={ocupied? 3 : 0,0,0,0,0,0,0};
           }
         }
       }else{
-        for(int y=0; y<16; y++){
-          if(y<deltaOffsety || y>=16+deltaOffsety){//clipped by scroll
-            for(int z=0; z<16; z++){
+        for(int y=0; y<FLOW_GRID_L; y++){
+          if(y<deltaOffsety || y>=FLOW_GRID_L+deltaOffsety){//clipped by scroll
+            for(int z=0; z<FLOW_GRID_L; z++){
               node=m_octree->search(octomap::OcTreeKey(x+newOffsetx,y+newOffsety,z+newOffsetz));
               if(node == NULL){
-                flowMap2[x+y*16+z*256]={1,0,0,0,0,0,0};
+                flowMap2[x+y*FLOW_GRID_L+z*FLOW_GRID_L2]={1,0,0,0,0,0,0};
                 continue;
               }
               ocupied = m_octree->isNodeOccupied(node);
-              flowMap2[x+y*16+z*256]={ocupied? 3 : 0,0,0,0,0,0,0};
+              flowMap2[x+y*FLOW_GRID_L+z*FLOW_GRID_L2]={ocupied? 3 : 0,0,0,0,0,0,0};
               }
         }else{
-            for(int z=0; z<16; z++){
-              if(z<deltaOffsetz || z>=16+deltaOffsetz){//clipped by scroll
+            for(int z=0; z<FLOW_GRID_L; z++){
+              if(z<deltaOffsetz || z>=FLOW_GRID_L+deltaOffsetz){//clipped by scroll
                 node=m_octree->search(octomap::OcTreeKey(x+newOffsetx,y+newOffsety,z+newOffsetz));
                 if(node == NULL){
-                  flowMap2[x+y*16+z*256]={1,0,0,0,0,0,0};
+                  flowMap2[x+y*FLOW_GRID_L+z*FLOW_GRID_L2]={1,0,0,0,0,0,0};
                   continue;
                 }
                 ocupied = m_octree->isNodeOccupied(node);
-                flowMap2[x+y*16+z*256]={ocupied? 3 : 0,0,0,0,0,0,0};
+                flowMap2[x+y*FLOW_GRID_L+z*FLOW_GRID_L2]={ocupied? 3 : 0,0,0,0,0,0,0};
               }else{//scroll
-                flowMap2[x+y*16+z*256]=flowMap1[x-deltaOffsetx+(y-deltaOffsety)*16+(z-deltaOffsetz)*256];
+                flowMap2[x+y*FLOW_GRID_L+z*FLOW_GRID_L2]=flowMap1[x-deltaOffsetx+(y-deltaOffsety)*FLOW_GRID_L+(z-deltaOffsetz)*FLOW_GRID_L2];
               }
             }
           }
@@ -603,31 +603,32 @@ void OctomapServer::insertScan(const tf::Point& sensorOriginTf, const PCLPointCl
     int y = (int)(it->first)[1]-newOffsety;
     int z = (int)(it->first)[2]-newOffsetz;
     //float s = m_octree->size();  //keeping it in meters and not cells for visualization
-    if(x>=0 && y>=0 && z>=0 && x<16 && y<16 && z<16){
+    if(x>=0 && y>=0 && z>=0 && x<FLOW_GRID_L && y<FLOW_GRID_L && z<FLOW_GRID_L){
       PointWeight p = it->second;
       point3d pcell = m_octree->keyToCoord(it->first);
-      prev = flowMap2[x+y*16+z*256];
+      prev = flowMap2[x+y*FLOW_GRID_L+z*FLOW_GRID_L2];
       if(prev.state>2){//correct if loaded from map or seen
         //ROS_WARN("update");
         constructed = {4, //seen
                     p.x/p.weight-pcell.x(),
                     p.y/p.weight-pcell.y(),
                     p.z/p.weight-pcell.z(),
-                  0.7f*prev.xs+0.3f*((p.x/p.weight-pcell.x())-prev.x),
-                  0.7f*prev.ys+0.3f*((p.y/p.weight-pcell.y())-prev.y),
-                  0.7f*prev.zs+0.3f*((p.z/p.weight-pcell.z())-prev.z)};
-        flowMap2[x+y*16+z*256]=constructed;
+                  RATIO_U_V*prev.xs+RATIO_U_P*((p.x/p.weight-pcell.x())-prev.x),
+                  RATIO_U_V*prev.ys+RATIO_U_P*((p.y/p.weight-pcell.y())-prev.y),
+                  RATIO_U_V*prev.zs+RATIO_U_P*((p.z/p.weight-pcell.z())-prev.z)};
+        flowMap2[x+y*FLOW_GRID_L+z*FLOW_GRID_L2]=constructed;
       }else{//"spawn"
         constructed = {0,0,0,0,0,0,0};//count, totals
-        for(int kx=std::max(0,x-2);kx<std::min(x+2,16);kx++){//kernel
-          for(int ky=std::max(0,y-2);ky<std::min(y+2,16);ky++){
-            for(int kz=std::max(0,z-2);kz<std::min(z+2,16);kz++){
-              prev = flowMap2[kx+(ky)*16+(kz)*256];
+        for(int kx=std::max(0,x-2);kx<std::min(x+2,FLOW_GRID_L);kx++){//kernel of equal weight, clipped at edges
+          for(int ky=std::max(0,y-2);ky<std::min(y+2,FLOW_GRID_L);ky++){
+            for(int kz=std::max(0,z-2);kz<std::min(z+2,FLOW_GRID_L);kz++){
+              prev = flowMap2[kx+(ky)*FLOW_GRID_L+(kz)*FLOW_GRID_L2];
               if(prev.state>2){ //ignore predicted ocupancy, what about map loaded cells?
                 int dx = kx-x;
                 int dy = ky-y;
                 int dz = kz-z;
                 constructed = {constructed.state+1,
+                              // since average position of a cells pointcloud tends to be in the center, to avoid sudden spikes in speed, position is clamped to edges of cell.
                               constructed.x+prev.x+((dx-0.5*sgn(dx)))*size,
                               constructed.y+prev.y+((dy-0.5*sgn(dy)))*size,
                               constructed.z+prev.z+((dz-0.5*sgn(dz)))*size,
@@ -643,13 +644,13 @@ void OctomapServer::insertScan(const tf::Point& sensorOriginTf, const PCLPointCl
                   p.x/p.weight-pcell.x(),//viewed pose
                   p.y/p.weight-pcell.y(),
                   p.z/p.weight-pcell.z(),
-                  0.5f*constructed.xs/count+0.5f*((p.x/p.weight-pcell.x())-constructed.x/count),//average delta pose and prev-velocity
-                  0.5f*constructed.ys/count+0.5f*((p.y/p.weight-pcell.y())-constructed.y/count),//first part is acceptable, second overshoots
-                  0.5f*constructed.zs/count+0.5f*((p.z/p.weight-pcell.z())-constructed.z/count)};
-        flowMap2[x+y*16+z*256]=constructed;
+                  RATIO_S_V*constructed.xs/count+RATIO_S_P*((p.x/p.weight-pcell.x())-constructed.x/count),//average delta pose and prev-velocity
+                  RATIO_S_V*constructed.ys/count+RATIO_S_P*((p.y/p.weight-pcell.y())-constructed.y/count),//first part is acceptable, second overshoots. Wheighted kernel??
+                  RATIO_S_V*constructed.zs/count+RATIO_S_P*((p.z/p.weight-pcell.z())-constructed.z/count)};
+        flowMap2[x+y*FLOW_GRID_L+z*FLOW_GRID_L2]=constructed;
         //moved between cells:
-        if(constructed.xs*constructed.xs+constructed.ys*constructed.ys+constructed.zs*constructed.zs>0.003f){
-          movedCells.insert(x+y*16+z*256);
+        if(constructed.xs*constructed.xs+constructed.ys*constructed.ys+constructed.zs*constructed.zs>VEL_THRESHOLD){
+          movedCells.insert(x+y*FLOW_GRID_L+z*FLOW_GRID_L2);
         }
       }
       //flowMap2[x+y*16+z*256]={2,p.x/p.weight-pcell.x(),p.y/p.weight-pcell.y(),p.z/p.weight-pcell.z(),0,0,0};
@@ -664,8 +665,8 @@ void OctomapServer::insertScan(const tf::Point& sensorOriginTf, const PCLPointCl
       int x = (int)(*it)[0]-newOffsetx;
       int y = (int)(*it)[1]-newOffsety;
       int z = (int)(*it)[2]-newOffsetz;
-      if(x>=0 && y>=0 && z>=0 && x<16 && y<16 && z<16){
-        flowMap2[x+y*16+z*256]={0,0,0,0,0,0,0};
+      if(x>=0 && y>=0 && z>=0 && x<FLOW_GRID_L && y<FLOW_GRID_L && z<FLOW_GRID_L){
+        flowMap2[x+y*FLOW_GRID_L+z*FLOW_GRID_L2]={0,0,0,0,0,0,0};
       }
     }
   }
@@ -673,24 +674,24 @@ void OctomapServer::insertScan(const tf::Point& sensorOriginTf, const PCLPointCl
   //predict
   int dx,dy,dz,x,y,z;
   for (auto cell: movedCells) {
-    x=cell%16;y=(cell/16)%16;z=(cell/256);
+    x=cell%FLOW_GRID_L;y=(cell/FLOW_GRID_L)%FLOW_GRID_L;z=(cell/FLOW_GRID_L2);
     constructed=flowMap2[cell];
-    dx=std::round((constructed.x+constructed.xs*2)/size);
-    dy=std::round((constructed.y+constructed.ys*2)/size);
-    dz=std::round((constructed.z+constructed.zs*2)/size);
+    dx=std::round((constructed.x+constructed.xs*PRED_FRAMES)/size);
+    dy=std::round((constructed.y+constructed.ys*PRED_FRAMES)/size);
+    dz=std::round((constructed.z+constructed.zs*PRED_FRAMES)/size);
     ROS_WARN_STREAM("movement: " << (constructed.xs*constructed.xs+constructed.ys*constructed.ys+constructed.zs*constructed.zs)<<
                     " dx: " << dx << " dy: " << dy << " dz: " << dz);
     x+=dx;y+=dy;z+=dz;
-    if(x>=0 && y>=0 && z>=0 && x<16 && y<16 && z<16){
+    if(x>=0 && y>=0 && z>=0 && x<FLOW_GRID_L && y<FLOW_GRID_L && z<FLOW_GRID_L){
       //ROS_WARN("in volume");
-      prev = flowMap2[x+y*16+z*256];
+      prev = flowMap2[x+y*FLOW_GRID_L+z*FLOW_GRID_L2];
       if(prev.state<3){
         //ROS_WARN("writting");
-        flowMap2[x+y*16+z*256]=
+        flowMap2[x+y*FLOW_GRID_L+z*FLOW_GRID_L2]=
           {2, //predicted
-          constructed.x+constructed.xs*2-size*dx,
-          constructed.y+constructed.ys*2-size*dy,
-          constructed.z+constructed.zs*2-size*dz,
+          constructed.x+constructed.xs*PRED_FRAMES-size*dx,
+          constructed.y+constructed.ys*PRED_FRAMES-size*dy,
+          constructed.z+constructed.zs*PRED_FRAMES-size*dz,
           0,
           0,
           0};
@@ -698,16 +699,16 @@ void OctomapServer::insertScan(const tf::Point& sensorOriginTf, const PCLPointCl
       }
     }
     x+=dx;y+=dy;z+=dz;
-    if(x>=0 && y>=0 && z>=0 && x<16 && y<16 && z<16){
+    if(x>=0 && y>=0 && z>=0 && x<FLOW_GRID_L && y<FLOW_GRID_L && z<FLOW_GRID_L){
       //ROS_WARN("in volume");
-      prev = flowMap2[x+y*16+z*256];
+      prev = flowMap2[x+y*FLOW_GRID_L+z*FLOW_GRID_L2];
       if(prev.state<3){
         //ROS_WARN("writting");
-        flowMap2[x+y*16+z*256]=
+        flowMap2[x+y*FLOW_GRID_L+z*FLOW_GRID_L2]=
           {2, //seen
-          constructed.x+constructed.xs*4-size*dx,
-          constructed.y+constructed.ys*4-size*dy,
-          constructed.z+constructed.zs*4-size*dz,
+          constructed.x+constructed.xs*PRED_FRAMES*2-size*dx,
+          constructed.y+constructed.ys*PRED_FRAMES*2-size*dy,
+          constructed.z+constructed.zs*PRED_FRAMES*2-size*dz,
           0,
           0,
           0};
@@ -1014,11 +1015,11 @@ void OctomapServer::publishAll(const ros::Time& rostime){
     std_msgs::ColorRGBA col;
     col.r=1;col.g=0;col.b=0;col.a=1;
     
-    for (int i=0; i< 4096; i++) {
+    for (int i=0; i< FLOW_GRID_L3; i++) {
       if (flowMap2[i].state>2){
         geometry_msgs::Point cubeCenter;
         geometry_msgs::Point cubeSpeed;
-        OcTreeKey k = OcTreeKey((i%16)+offsetx,(i/16)%16+offsety,(i/256)%16+offsetz);
+        OcTreeKey k = OcTreeKey((i%FLOW_GRID_L)+offsetx,(i/FLOW_GRID_L)%FLOW_GRID_L+offsety,(i/FLOW_GRID_L2)%FLOW_GRID_L+offsetz);
         octomap::point3d point = m_octree->keyToCoord(k);
         cubeCenter.x = point.x()+flowMap2[i].x;
         cubeCenter.y = point.y()+flowMap2[i].y;
@@ -1038,7 +1039,7 @@ void OctomapServer::publishAll(const ros::Time& rostime){
       }else if(flowMap2[i].state==2){
         geometry_msgs::Point cubeCenter;
         geometry_msgs::Point cubeSpeed;
-        OcTreeKey k = OcTreeKey((i%16)+offsetx,(i/16)%16+offsety,(i/256)%16+offsetz);
+        OcTreeKey k = OcTreeKey((i%FLOW_GRID_L)+offsetx,(i/FLOW_GRID_L)%FLOW_GRID_L+offsety,(i/FLOW_GRID_L2)%FLOW_GRID_L+offsetz);
         octomap::point3d point = m_octree->keyToCoord(k);
         cubeCenter.x = point.x()+flowMap2[i].x;
         cubeCenter.y = point.y()+flowMap2[i].y;
