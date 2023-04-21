@@ -221,8 +221,8 @@ protected:
 
   //!!!
   #define FLOW_GRID_L 16
-  #define FLOW_GRID_L2 FLOW_GRID_L*FLOW_GRID_L
-  #define FLOW_GRID_L3 FLOW_GRID_L2*FLOW_GRID_L
+  #define FLOW_GRID_L2 256
+  #define FLOW_GRID_L3 4096
 
   // sampling ratio when updating a cell or spawning an occupied cell.
   // P is the contribution of the change in observed position, V is the contribution of the momentum of previously observed speed.

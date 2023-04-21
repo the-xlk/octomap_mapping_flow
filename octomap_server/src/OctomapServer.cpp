@@ -1028,15 +1028,20 @@ void OctomapServer::publishAll(const ros::Time& rostime){
         //cubeCenter.y = ((i/16)%16)*size;//+offsety;
         //cubeCenter.z = ((i/256)%16)*size;//+offsetz;
         flowNodesVis.markers[0].points.push_back(cubeCenter);
-        if (m_useHeightMap){
+        col.r=0.5 + flowMap2[i].xs*10;
+        col.g=0.5 + flowMap2[i].ys*10;
+        col.b=0.5 + flowMap2[i].zs*10;
+        flowNodesVis.markers[0].colors.push_back(col);
+        /*if (m_useHeightMap){
           double minX, minY, minZ, maxX, maxY, maxZ;
           m_octree->getMetricMin(minX, minY, minZ);
           m_octree->getMetricMax(maxX, maxY, maxZ);
 
           double h = (1.0 - std::min(std::max((cubeCenter.z-minZ)/ (maxZ - minZ), 0.0), 1.0)) *m_colorFactor;
           flowNodesVis.markers[0].colors.push_back(heightMapColor(h));
-        }
+        }*/
       }else if(flowMap2[i].state==2){
+        col.r=1;col.g=0;col.b=0;
         geometry_msgs::Point cubeCenter;
         geometry_msgs::Point cubeSpeed;
         OcTreeKey k = OcTreeKey((i%FLOW_GRID_L)+offsetx,(i/FLOW_GRID_L)%FLOW_GRID_L+offsety,(i/FLOW_GRID_L2)%FLOW_GRID_L+offsetz);
