@@ -229,10 +229,10 @@ protected:
   // P >> V no stabilization, last change of position determines speed
   // P << V heavy averaging of velocity, stable, but unresponsive
   // P + V should be 1, though hyper/hypo kinematic models can be tested.
-  #define RATIO_U_P 0.5f // 0.3
-  #define RATIO_U_V 0.5f // 0.7 
-  #define RATIO_S_P 0.5f // 0.5
-  #define RATIO_S_V 0.5f // 0.5
+  #define RATIO_U_P 0.1f // 0.3
+  #define RATIO_U_V 0.9f // 0.7 
+  #define RATIO_S_P 0.1f // 0.5
+  #define RATIO_S_V 0.9f // 0.5
 
   #define VEL_THRESHOLD 0.003f // cells per frame squared, so as to cut out a square root
 

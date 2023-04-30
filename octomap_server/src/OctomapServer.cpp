@@ -469,7 +469,8 @@ void OctomapServer::insertScan(const tf::Point& sensorOriginTf, const PCLPointCl
 
   // now mark all occupied cells:
   for (auto it : occupiedFloatingCells) {
-    m_octree->setNodeValue(it.first, 1.0);//!!!
+    m_octree->updateNode(it.first, true);
+    //m_octree->setNodeValue(it.first, 1.0);//!!!
   }
   
   // mark free cells only if not seen occupied in this cloud
@@ -605,6 +606,7 @@ void OctomapServer::insertScan(const tf::Point& sensorOriginTf, const PCLPointCl
     //float s = m_octree->size();  //keeping it in meters and not cells for visualization
     if(x>=0 && y>=0 && z>=0 && x<FLOW_GRID_L && y<FLOW_GRID_L && z<FLOW_GRID_L){
       PointWeight p = it->second;
+      if (p.weight<2) continue; //skip single sample cells??
       point3d pcell = m_octree->keyToCoord(it->first);
       prev = flowMap2[x+y*FLOW_GRID_L+z*FLOW_GRID_L2];
       if(prev.state>2){//correct if loaded from map or seen
@@ -618,6 +620,7 @@ void OctomapServer::insertScan(const tf::Point& sensorOriginTf, const PCLPointCl
                   RATIO_U_V*prev.zs+RATIO_U_P*((p.z/p.weight-pcell.z())-prev.z)};
         flowMap2[x+y*FLOW_GRID_L+z*FLOW_GRID_L2]=constructed;
       }else{//"spawn"
+        float sqDistSum=0;
         constructed = {0,0,0,0,0,0,0};//count, totals
         for(int kx=std::max(0,x-2);kx<std::min(x+2,FLOW_GRID_L);kx++){//kernel of equal weight, clipped at edges
           for(int ky=std::max(0,y-2);ky<std::min(y+2,FLOW_GRID_L);ky++){
@@ -627,31 +630,40 @@ void OctomapServer::insertScan(const tf::Point& sensorOriginTf, const PCLPointCl
                 int dx = kx-x;
                 int dy = ky-y;
                 int dz = kz-z;
+                float cx = prev.x+((dx-0.5*sgn(dx)))*size;
+                float cy = prev.y+((dy-0.5*sgn(dy)))*size;
+                float cz = prev.z+((dz-0.5*sgn(dz)))*size;
+                float invDistSq = 1/(cx*cx+cy*cy+cz*cz); //inverse square distance for weight
+                sqDistSum += invDistSq;
                 constructed = {constructed.state+1,
                               // since average position of a cells pointcloud tends to be in the center, to avoid sudden spikes in speed, position is clamped to edges of cell.
-                              constructed.x+prev.x+((dx-0.5*sgn(dx)))*size,
-                              constructed.y+prev.y+((dy-0.5*sgn(dy)))*size,
-                              constructed.z+prev.z+((dz-0.5*sgn(dz)))*size,
-                              constructed.xs+prev.xs,
-                              constructed.ys+prev.ys,
-                              constructed.zs+prev.zs};
+                              constructed.x+cx*invDistSq,
+                              constructed.y+cy*invDistSq,
+                              constructed.z+cz*invDistSq,
+                              constructed.xs+prev.xs*invDistSq,
+                              constructed.ys+prev.ys*invDistSq,
+                              constructed.zs+prev.zs*invDistSq};
               }
             }
           }
         }
-        float count =std::max(1,constructed.state);
+        if (constructed.state == 0){//nothing to sample
+          flowMap2[x+y*FLOW_GRID_L+z*FLOW_GRID_L2] = {5,0,0,0,0,0,0};
+          continue;
+        }
+        //float count =std::max(1,constructed.state);
         constructed = {5, //kernel
                   p.x/p.weight-pcell.x(),//viewed pose
                   p.y/p.weight-pcell.y(),
                   p.z/p.weight-pcell.z(),
-                  RATIO_S_V*constructed.xs/count+RATIO_S_P*((p.x/p.weight-pcell.x())-constructed.x/count),//average delta pose and prev-velocity
-                  RATIO_S_V*constructed.ys/count+RATIO_S_P*((p.y/p.weight-pcell.y())-constructed.y/count),//first part is acceptable, second overshoots. Wheighted kernel??
-                  RATIO_S_V*constructed.zs/count+RATIO_S_P*((p.z/p.weight-pcell.z())-constructed.z/count)};
+                  RATIO_S_V*constructed.xs/sqDistSum+RATIO_S_P*((p.x/p.weight-pcell.x())-constructed.x/sqDistSum),//average delta pose and prev-velocity
+                  RATIO_S_V*constructed.ys/sqDistSum+RATIO_S_P*((p.y/p.weight-pcell.y())-constructed.y/sqDistSum),//first part is acceptable, second overshoots. Wheighted kernel??
+                  RATIO_S_V*constructed.zs/sqDistSum+RATIO_S_P*((p.z/p.weight-pcell.z())-constructed.z/sqDistSum)};
         flowMap2[x+y*FLOW_GRID_L+z*FLOW_GRID_L2]=constructed;
         //moved between cells:
-        if(constructed.xs*constructed.xs+constructed.ys*constructed.ys+constructed.zs*constructed.zs>VEL_THRESHOLD){
+        /*if(constructed.xs*constructed.xs+constructed.ys*constructed.ys+constructed.zs*constructed.zs>VEL_THRESHOLD){
           movedCells.insert(x+y*FLOW_GRID_L+z*FLOW_GRID_L2);
-        }
+        }*/
       }
       //flowMap2[x+y*16+z*256]={2,p.x/p.weight-pcell.x(),p.y/p.weight-pcell.y(),p.z/p.weight-pcell.z(),0,0,0};
     }
@@ -1040,7 +1052,7 @@ void OctomapServer::publishAll(const ros::Time& rostime){
           double h = (1.0 - std::min(std::max((cubeCenter.z-minZ)/ (maxZ - minZ), 0.0), 1.0)) *m_colorFactor;
           flowNodesVis.markers[0].colors.push_back(heightMapColor(h));
         }*/
-      }else if(flowMap2[i].state==2){
+      }/*else if(flowMap2[i].state==99){//2
         col.r=1;col.g=0;col.b=0;
         geometry_msgs::Point cubeCenter;
         geometry_msgs::Point cubeSpeed;
@@ -1054,7 +1066,7 @@ void OctomapServer::publishAll(const ros::Time& rostime){
         //cubeCenter.z = ((i/256)%16)*size;//+offsetz;
         flowNodesVis.markers[1].points.push_back(cubeCenter);
         flowNodesVis.markers[1].colors.push_back(col);
-      }
+      }*/
 
 
       
