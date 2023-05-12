@@ -229,10 +229,12 @@ protected:
   // P >> V no stabilization, last change of position determines speed
   // P << V heavy averaging of velocity, stable, but unresponsive
   // P + V should be 1, though hyper/hypo kinematic models can be tested.
-  #define RATIO_U_P 0.1f // 0.3
-  #define RATIO_U_V 0.9f // 0.7 
+  #define RATIO_U_P 0.3f // 0.3
+  #define RATIO_U_V 0.7f // 0.7 
   #define RATIO_S_P 0.1f // 0.5
   #define RATIO_S_V 0.9f // 0.5
+
+   #define RATIO_DECAY 0.7f // 0.5
 
   #define VEL_THRESHOLD 0.003f // cells per frame squared, so as to cut out a square root
 
@@ -263,6 +265,7 @@ protected:
   FlowCell b2[FLOW_GRID_L3];//16^3
   FlowCell *flowMap1 = b1;
   FlowCell *flowMap2 = b2;
+  float velRatio(FlowCell prevState);
   
   octomap::OcTreeKey origin;
   int offsetx,offsety,offsetz;

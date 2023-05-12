@@ -613,9 +613,9 @@ void OctomapServer::insertScan(const tf::Point& sensorOriginTf, const PCLPointCl
                     prev.x,
                     prev.y,
                     prev.z,
-                    RATIO_U_V*prev.xs,
-                    RATIO_U_V*prev.ys,
-                    RATIO_U_V*prev.zs};
+                    RATIO_DECAY*prev.xs,
+                    RATIO_DECAY*prev.ys,
+                    RATIO_DECAY*prev.zs};
     }else{//seen
       PointWeight p = it->second;
 
@@ -625,14 +625,14 @@ void OctomapServer::insertScan(const tf::Point& sensorOriginTf, const PCLPointCl
       prev = flowMap2[i];
 
       if(prev.state>2){//correct if loaded from map or seen
-
+        float ratio = velRatio(prev);
         constructed = {4, //seen
                     p.x/p.weight-pcell.x(),
                     p.y/p.weight-pcell.y(),
                     p.z/p.weight-pcell.z(),
-                    RATIO_U_V*prev.xs+RATIO_U_P*((p.x/p.weight-pcell.x())-prev.x),
-                    RATIO_U_V*prev.ys+RATIO_U_P*((p.y/p.weight-pcell.y())-prev.y),
-                    RATIO_U_V*prev.zs+RATIO_U_P*((p.z/p.weight-pcell.z())-prev.z)};
+                    (1-ratio)*prev.xs+ratio*((p.x/p.weight-pcell.x())-prev.x),
+                    (1-ratio)*prev.ys+ratio*((p.y/p.weight-pcell.y())-prev.y),
+                    (1-ratio)*prev.zs+ratio*((p.z/p.weight-pcell.z())-prev.z)};
         flowMap2[i]=constructed;
 
       }else{//"spawn" from kernel sample
@@ -676,13 +676,21 @@ void OctomapServer::insertScan(const tf::Point& sensorOriginTf, const PCLPointCl
           continue;
         }
 
+        constructed={5, //kernel
+                  constructed.x/sqDistSum,
+                  constructed.y/sqDistSum,
+                  constructed.z/sqDistSum,
+                  constructed.xs/sqDistSum,
+                  constructed.ys/sqDistSum,
+                  constructed.zs/sqDistSum};
+        float ratio = velRatio(constructed);
         constructed = {5, //kernel
                   p.x/p.weight-pcell.x(),//viewed pose
                   p.y/p.weight-pcell.y(),
                   p.z/p.weight-pcell.z(),
-                  RATIO_S_V*constructed.xs/sqDistSum+RATIO_S_P*((p.x/p.weight-pcell.x())-constructed.x/sqDistSum),//average delta pose and prev-velocity
-                  RATIO_S_V*constructed.ys/sqDistSum+RATIO_S_P*((p.y/p.weight-pcell.y())-constructed.y/sqDistSum),//first part is acceptable, second overshoots. Wheighted kernel??
-                  RATIO_S_V*constructed.zs/sqDistSum+RATIO_S_P*((p.z/p.weight-pcell.z())-constructed.z/sqDistSum)};
+                  (1-ratio)*constructed.xs+ratio*((p.x/p.weight-pcell.x())-constructed.x),
+                  (1-ratio)*constructed.ys+ratio*((p.y/p.weight-pcell.y())-constructed.y),
+                  (1-ratio)*constructed.zs+ratio*((p.z/p.weight-pcell.z())-constructed.z)};
         flowMap2[i]=constructed;
       }
     }
@@ -757,6 +765,10 @@ void OctomapServer::publishProjected2DMap(const ros::Time& rostime) {
     m_gridmap.header.stamp = rostime;
     m_mapPub.publish(m_gridmap);
   }
+}
+
+float OctomapServer::velRatio(FlowCell prevState){
+  return 0.2+0.8*std::min(1.0f,(prevState.xs*prevState.xs+prevState.ys*prevState.ys+prevState.zs*prevState.zs) * 100);
 }
 
 void OctomapServer::publishAll(const ros::Time& rostime){
