@@ -640,7 +640,7 @@ void OctomapServer::insertScan(const tf::Point& sensorOriginTf, const PCLPointCl
         float sqDistSum=0;//sum of inverse of square distances
         constructed = {0,0,0,0,0,0,0};//count, totals
 
-        //kernel clipped at edges
+        //kernel clipped at edges !!! kernel reading from writing buffer?!?!
         for(int kx=std::max(0,x-2);kx<std::min(x+2,FLOW_GRID_L);kx++){
           for(int ky=std::max(0,y-2);ky<std::min(y+2,FLOW_GRID_L);ky++){
             for(int kz=std::max(0,z-2);kz<std::min(z+2,FLOW_GRID_L);kz++){

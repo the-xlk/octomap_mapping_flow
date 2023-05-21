@@ -56,6 +56,9 @@ target_link_libraries(octomap_server_node ${PROJECT_NAME} ${LINK_LIBS})
 add_executable(octomap_color_server_node src/octomap_server_node.cpp)
 target_link_libraries(octomap_color_server_node ${PROJECT_NAME}_color ${LINK_LIBS})
 
+add_executable(offb_node src/offb_node.cpp)
+target_link_libraries(offb_node ${LINK_LIBS})
+
 add_executable(octomap_server_static src/octomap_server_static.cpp)
 target_link_libraries(octomap_server_static ${PROJECT_NAME} ${LINK_LIBS})
 
