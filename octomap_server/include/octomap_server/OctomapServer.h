@@ -101,6 +101,7 @@ public:
   bool resetSrv(std_srvs::Empty::Request& req, std_srvs::Empty::Response& resp);
 
   virtual void insertCloudCallback(const sensor_msgs::PointCloud2::ConstPtr& cloud);
+  virtual void calculateTargetCallback(const geometry_msgs::Pose::ConstPtr& targetIn);
   virtual bool openFile(const std::string& filename);
 
 protected:
@@ -206,9 +207,11 @@ protected:
   static std_msgs::ColorRGBA heightMapColor(double h);
   ros::NodeHandle m_nh;
   ros::NodeHandle m_nh_private;
-  ros::Publisher  m_markerPub, m_deltaPub, m_flowPub, m_binaryMapPub, m_fullMapPub, m_pointCloudPub, m_collisionObjectPub, m_mapPub, m_cmapPub, m_fmapPub, m_fmarkerPub;
+  ros::Publisher  m_markerPub, m_deltaPub, m_flowPub, m_binaryMapPub, m_fullMapPub, m_pointCloudPub, m_collisionObjectPub, m_mapPub, m_cmapPub, m_fmapPub, m_fmarkerPub, m_ftargetPub;
   message_filters::Subscriber<sensor_msgs::PointCloud2>* m_pointCloudSub;
   tf::MessageFilter<sensor_msgs::PointCloud2>* m_tfPointCloudSub;
+  message_filters::Subscriber<geometry_msgs::Pose>* m_targetSub;
+  tf::MessageFilter<geometry_msgs::Pose>* m_tfTargetSub;
   ros::ServiceServer m_octomapBinaryService, m_octomapFullService, m_clearBBXService, m_resetService;
   tf::TransformListener m_tfListener;
   boost::recursive_mutex m_config_mutex;
@@ -268,6 +271,8 @@ protected:
   float velRatio(FlowCell prevState);
   
   octomap::OcTreeKey origin;
+  octomath::Vector3 shiftedOrigin;
+  octomath::Vector3 originOnGrid;
   int offsetx,offsety,offsetz;
 
   double m_minRange;

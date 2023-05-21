@@ -182,10 +182,15 @@ OctomapServer::OctomapServer(const ros::NodeHandle private_nh_, const ros::NodeH
   m_pointCloudPub = m_nh.advertise<sensor_msgs::PointCloud2>("octomap_point_cloud_centers", 1, m_latchedTopics);
   m_mapPub = m_nh.advertise<nav_msgs::OccupancyGrid>("projected_map", 5, m_latchedTopics);
   m_fmarkerPub = m_nh.advertise<visualization_msgs::MarkerArray>("free_cells_vis_array", 1, m_latchedTopics);
+  m_ftargetPub = m_nh.advertise<geometry_msgs::Pose>("target_pose", 1, m_latchedTopics);
 
   m_pointCloudSub = new message_filters::Subscriber<sensor_msgs::PointCloud2> (m_nh, "cloud_in", 5);
   m_tfPointCloudSub = new tf::MessageFilter<sensor_msgs::PointCloud2> (*m_pointCloudSub, m_tfListener, m_worldFrameId, 5);
   m_tfPointCloudSub->registerCallback(boost::bind(&OctomapServer::insertCloudCallback, this, boost::placeholders::_1));
+
+  m_targetSub = new message_filters::Subscriber<geometry_msgs::Pose> (m_nh, "target_in", 5);
+  //m_tfTargetSub = new tf::MessageFilter<geometry_msgs::Pose> (*m_targetSub, m_tfListener, m_worldFrameId, 5);
+  m_targetSub->registerCallback(boost::bind(&OctomapServer::calculateTargetCallback, this, boost::placeholders::_1));
 
   m_octomapBinaryService = m_nh.advertiseService("octomap_binary", &OctomapServer::octomapBinarySrv, this);
   m_octomapFullService = m_nh.advertiseService("octomap_full", &OctomapServer::octomapFullSrv, this);
@@ -464,7 +469,8 @@ void OctomapServer::insertScan(const tf::Point& sensorOriginTf, const PCLPointCl
 
   //!!!
   float shift = m_octree->getNodeSize(m_treeDepth)/2;
-  point3d shiftedOrigin = point3d(sensorOrigin.x()+shift,sensorOrigin.y()+shift,sensorOrigin.z()+shift);
+  //!!!CURRENTLY UNUSED, change that?
+  //shiftedOrigin = point3d(sensorOrigin.x()+shift,sensorOrigin.y()+shift,sensorOrigin.z()+shift);
   m_octree->coordToKeyChecked(sensorOrigin, origin);
 
   // now mark all occupied cells:
@@ -525,6 +531,10 @@ void OctomapServer::insertScan(const tf::Point& sensorOriginTf, const PCLPointCl
   int deltaOffsetx = offsetx - newOffsetx;
   int deltaOffsety = offsety - newOffsety;
   int deltaOffsetz = offsetz - newOffsetz;
+
+  originOnGrid = point3d(sensorOrigin.x()-offsetx*shift*2,
+                        sensorOrigin.y()-offsety*shift*2,
+                        sensorOrigin.z()-offsetz*shift*2);
 
   //ROS_WARN("offset: %d %d %d", deltaOffsetx,deltaOffsety,deltaOffsetz);
         
@@ -1150,6 +1160,39 @@ void OctomapServer::publishAll(const ros::Time& rostime){
   double total_elapsed = (ros::WallTime::now() - startTime).toSec();
   ROS_DEBUG("Map publishing in OctomapServer took %f sec", total_elapsed);
 }
+
+
+void OctomapServer::calculateTargetCallback(const geometry_msgs::Pose::ConstPtr& targetIn){
+  double size = m_octree->getNodeSize(m_maxTreeDepth);
+  //originOnGrid, starting at grid corner 0,0,0
+  for (int i=0; i< FLOW_GRID_L3; i++) {
+      if (flowMap2[i].state>2){
+        float cx = flowMap2[i].x+(i%FLOW_GRID_L)*size;
+        float cy = flowMap2[i].y+((i/FLOW_GRID_L)%FLOW_GRID_L)*size;
+        float cz = flowMap2[i].z+(i/FLOW_GRID_L2)*size;
+      }
+  }
+  geometry_msgs::Pose pose;
+  geometry_msgs::Point point;
+  geometry_msgs::Quaternion quaternion;
+
+  point.x = originOnGrid.x()+offsetx*size;
+  point.y = originOnGrid.y()+offsety*size;
+  point.z = originOnGrid.z()+offsetz*size;
+
+  quaternion.x=1;
+  quaternion.y=0;
+  quaternion.z=0;
+  quaternion.w=0;
+
+  pose.position = point;
+  pose.orientation = quaternion;
+
+
+  m_ftargetPub.publish(pose);
+
+}
+
 
 bool OctomapServer::octomapBinarySrv(OctomapSrv::Request  &req,
                                     OctomapSrv::Response &res)
