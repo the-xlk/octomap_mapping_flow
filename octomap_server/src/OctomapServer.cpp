@@ -182,7 +182,7 @@ OctomapServer::OctomapServer(const ros::NodeHandle private_nh_, const ros::NodeH
   m_pointCloudPub = m_nh.advertise<sensor_msgs::PointCloud2>("octomap_point_cloud_centers", 1, m_latchedTopics);
   m_mapPub = m_nh.advertise<nav_msgs::OccupancyGrid>("projected_map", 5, m_latchedTopics);
   m_fmarkerPub = m_nh.advertise<visualization_msgs::MarkerArray>("free_cells_vis_array", 1, m_latchedTopics);
-  m_ftargetPub = m_nh.advertise<geometry_msgs::Pose>("target_pose", 1, m_latchedTopics);
+  m_ftargetPub = m_nh.advertise<geometry_msgs::PoseStamped>("target_pose", 1, m_latchedTopics);
 
   m_pointCloudSub = new message_filters::Subscriber<sensor_msgs::PointCloud2> (m_nh, "cloud_in", 5);
   m_tfPointCloudSub = new tf::MessageFilter<sensor_msgs::PointCloud2> (*m_pointCloudSub, m_tfListener, m_worldFrameId, 5);
@@ -719,6 +719,8 @@ void OctomapServer::insertScan(const tf::Point& sensorOriginTf, const PCLPointCl
     }
   }
 
+  calculateTarget();
+
   //predict
   /*
   int dx,dy,dz,x,y,z;
@@ -1163,6 +1165,13 @@ void OctomapServer::publishAll(const ros::Time& rostime){
 
 
 void OctomapServer::calculateTargetCallback(const geometry_msgs::Pose::ConstPtr& targetIn){
+  targetInput=point3d(targetIn->position.x,
+    targetIn->position.y,
+    targetIn->position.z);
+  calculateTarget();
+}
+
+void OctomapServer::calculateTarget(){
   double size = m_octree->getNodeSize(m_maxTreeDepth);
   //originOnGrid, starting at grid corner 0,0,0
   for (int i=0; i< FLOW_GRID_L3; i++) {
@@ -1172,11 +1181,14 @@ void OctomapServer::calculateTargetCallback(const geometry_msgs::Pose::ConstPtr&
         float cz = flowMap2[i].z+(i/FLOW_GRID_L2)*size;
       }
   }
+
+  geometry_msgs::PoseStamped poseStamped;
+  std_msgs::Header header;
   geometry_msgs::Pose pose;
   geometry_msgs::Point point;
   geometry_msgs::Quaternion quaternion;
 
-  point.x = originOnGrid.x()+offsetx*size;
+  point.x = originOnGrid.x()+offsetx*size;//generally correct
   point.y = originOnGrid.y()+offsety*size;
   point.z = originOnGrid.z()+offsetz*size;
 
@@ -1188,8 +1200,14 @@ void OctomapServer::calculateTargetCallback(const geometry_msgs::Pose::ConstPtr&
   pose.position = point;
   pose.orientation = quaternion;
 
+  poseStamped.pose = pose;
 
-  m_ftargetPub.publish(pose);
+  header.frame_id="map";
+  poseStamped.header=header;
+
+
+
+  m_ftargetPub.publish(poseStamped);
 
 }
 

@@ -101,7 +101,8 @@ public:
   bool resetSrv(std_srvs::Empty::Request& req, std_srvs::Empty::Response& resp);
 
   virtual void insertCloudCallback(const sensor_msgs::PointCloud2::ConstPtr& cloud);
-  virtual void calculateTargetCallback(const geometry_msgs::Pose::ConstPtr& targetIn);
+  void calculateTargetCallback(const geometry_msgs::Pose::ConstPtr& targetIn);
+  void calculateTarget();
   virtual bool openFile(const std::string& filename);
 
 protected:
@@ -273,6 +274,7 @@ protected:
   octomap::OcTreeKey origin;
   octomath::Vector3 shiftedOrigin;
   octomath::Vector3 originOnGrid;
+  octomath::Vector3 targetInput;
   int offsetx,offsety,offsetz;
 
   double m_minRange;
