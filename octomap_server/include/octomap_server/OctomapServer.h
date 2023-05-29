@@ -275,6 +275,7 @@ protected:
   octomath::Vector3 shiftedOrigin;
   octomath::Vector3 originOnGrid;
   octomath::Vector3 targetInput;
+  uint32_t targetSeq=0;
   int offsetx,offsety,offsetz;
 
   double m_minRange;

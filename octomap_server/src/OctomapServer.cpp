@@ -1174,11 +1174,25 @@ void OctomapServer::calculateTargetCallback(const geometry_msgs::Pose::ConstPtr&
 void OctomapServer::calculateTarget(){
   double size = m_octree->getNodeSize(m_maxTreeDepth);
   //originOnGrid, starting at grid corner 0,0,0
+  float fx=0, fy=0, fz=0, cx=0, cy=0, cz=0, dot=0, sqr = 0;
+  float count = 0;
   for (int i=0; i< FLOW_GRID_L3; i++) {
       if (flowMap2[i].state>2){
-        float cx = flowMap2[i].x+(i%FLOW_GRID_L)*size;
-        float cy = flowMap2[i].y+((i/FLOW_GRID_L)%FLOW_GRID_L)*size;
-        float cz = flowMap2[i].z+(i/FLOW_GRID_L2)*size;
+        cx = (flowMap2[i].x+(i%FLOW_GRID_L)-7.5f)*size;// - originOnGrid.x() - offsetx*size;
+        cy = (flowMap2[i].y+((i/FLOW_GRID_L)%FLOW_GRID_L)-7.5f)*size;// - originOnGrid.y() - offsety*size;
+        cz = (flowMap2[i].z+(i/FLOW_GRID_L2)-7.5f)*size;// - originOnGrid.z() - offsetz*size;
+
+        sqr = cx * cx + cy * cy + cz * cz;
+        dot = cx * flowMap2[i].xs + cy * flowMap2[i].ys + cz * flowMap2[i].zs;
+
+        fx += -cx * dot / (sqr * sqr);
+        fy += -cy * dot / (sqr * sqr);
+        fz += -cz * dot / (sqr * sqr);
+
+        //fx += cx;
+        //fy += cy;
+        //fz += cz;
+        count ++;
       }
   }
 
@@ -1188,9 +1202,13 @@ void OctomapServer::calculateTarget(){
   geometry_msgs::Point point;
   geometry_msgs::Quaternion quaternion;
 
-  point.x = originOnGrid.x()+offsetx*size;//generally correct
-  point.y = originOnGrid.y()+offsety*size;
-  point.z = originOnGrid.z()+offsetz*size;
+  point.x = originOnGrid.x()+offsetx*size+fx;//+(fx*100)/count;//generally correct
+  point.y = originOnGrid.y()+offsety*size+fy;//+(fy*100)/count;
+  point.z = originOnGrid.z()+offsetz*size+fz;//+(fz*100)/count;
+
+  //point.x = fx*100;//generally correct
+  //point.y = fy*100;
+  //point.z = fz*100;  
 
   quaternion.x=1;
   quaternion.y=0;
@@ -1203,6 +1221,8 @@ void OctomapServer::calculateTarget(){
   poseStamped.pose = pose;
 
   header.frame_id="map";
+  header.stamp = ros::Time::now();
+  header.seq = targetSeq++;
   poseStamped.header=header;
 
 
