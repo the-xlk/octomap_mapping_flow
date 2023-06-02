@@ -1185,9 +1185,9 @@ void OctomapServer::calculateTarget(){
         sqr = cx * cx + cy * cy + cz * cz;
         dot = cx * flowMap2[i].xs + cy * flowMap2[i].ys + cz * flowMap2[i].zs;
 
-        fx += -cx * dot / (sqr * sqr);
-        fy += -cy * dot / (sqr * sqr);
-        fz += -cz * dot / (sqr * sqr);
+        fx += -cx * (1-dot*1000) / (sqr * sqr);
+        fy += -cy * (1-dot*1000) / (sqr * sqr);
+        fz += -cz * (1-dot*1000) / (sqr * sqr);
 
         //fx += cx;
         //fy += cy;
@@ -1202,9 +1202,9 @@ void OctomapServer::calculateTarget(){
   geometry_msgs::Point point;
   geometry_msgs::Quaternion quaternion;
 
-  point.x = originOnGrid.x()+offsetx*size+fx;//+(fx*100)/count;//generally correct
-  point.y = originOnGrid.y()+offsety*size+fy;//+(fy*100)/count;
-  point.z = originOnGrid.z()+offsetz*size+fz;//+(fz*100)/count;
+  point.x = originOnGrid.x()+offsetx*size+fx/1000;//+(fx*100)/count;//generally correct
+  point.y = originOnGrid.y()+offsety*size+fy/1000;//+(fy*100)/count;
+  point.z = originOnGrid.z()+offsetz*size+fz/1000;//+(fz*100)/count;
 
   //point.x = fx*100;//generally correct
   //point.y = fy*100;
