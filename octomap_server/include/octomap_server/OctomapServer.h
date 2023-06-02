@@ -101,7 +101,7 @@ public:
   bool resetSrv(std_srvs::Empty::Request& req, std_srvs::Empty::Response& resp);
 
   virtual void insertCloudCallback(const sensor_msgs::PointCloud2::ConstPtr& cloud);
-  void calculateTargetCallback(const geometry_msgs::Pose::ConstPtr& targetIn);
+  void calculateTargetCallback(const geometry_msgs::PoseStamped::ConstPtr& targetIn);
   void calculateTarget();
   virtual bool openFile(const std::string& filename);
 
@@ -211,7 +211,7 @@ protected:
   ros::Publisher  m_markerPub, m_deltaPub, m_flowPub, m_binaryMapPub, m_fullMapPub, m_pointCloudPub, m_collisionObjectPub, m_mapPub, m_cmapPub, m_fmapPub, m_fmarkerPub, m_ftargetPub;
   message_filters::Subscriber<sensor_msgs::PointCloud2>* m_pointCloudSub;
   tf::MessageFilter<sensor_msgs::PointCloud2>* m_tfPointCloudSub;
-  message_filters::Subscriber<geometry_msgs::Pose>* m_targetSub;
+  message_filters::Subscriber<geometry_msgs::PoseStamped>* m_targetSub;
   tf::MessageFilter<geometry_msgs::Pose>* m_tfTargetSub;
   ros::ServiceServer m_octomapBinaryService, m_octomapFullService, m_clearBBXService, m_resetService;
   tf::TransformListener m_tfListener;

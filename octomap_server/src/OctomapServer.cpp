@@ -188,7 +188,7 @@ OctomapServer::OctomapServer(const ros::NodeHandle private_nh_, const ros::NodeH
   m_tfPointCloudSub = new tf::MessageFilter<sensor_msgs::PointCloud2> (*m_pointCloudSub, m_tfListener, m_worldFrameId, 5);
   m_tfPointCloudSub->registerCallback(boost::bind(&OctomapServer::insertCloudCallback, this, boost::placeholders::_1));
 
-  m_targetSub = new message_filters::Subscriber<geometry_msgs::Pose> (m_nh, "target_in", 5);
+  m_targetSub = new message_filters::Subscriber<geometry_msgs::PoseStamped> (m_nh, "/move_base_simple/goal", 5);
   //m_tfTargetSub = new tf::MessageFilter<geometry_msgs::Pose> (*m_targetSub, m_tfListener, m_worldFrameId, 5);
   m_targetSub->registerCallback(boost::bind(&OctomapServer::calculateTargetCallback, this, boost::placeholders::_1));
 
@@ -1164,10 +1164,16 @@ void OctomapServer::publishAll(const ros::Time& rostime){
 }
 
 
-void OctomapServer::calculateTargetCallback(const geometry_msgs::Pose::ConstPtr& targetIn){
-  targetInput=point3d(targetIn->position.x,
-    targetIn->position.y,
-    targetIn->position.z);
+void OctomapServer::calculateTargetCallback(const geometry_msgs::PoseStamped::ConstPtr& targetIn){
+  targetInput=point3d(targetIn->pose.position.x,
+                      targetIn->pose.position.y,
+                      targetIn->pose.position.z);
+  //ROS_WARN_STREAM("key: x :"<<targetIn->pose.position.x<<
+  //                "key: y :"<<targetIn->pose.position.y<<
+  //                "key: z :"<<targetIn->pose.position.z);
+  //ROS_WARN_STREAM("res: x :"<<targetInput.x()<<
+  //                "res: y :"<<targetInput.y()<<
+  //                "res: z :"<<targetInput.z());
   calculateTarget();
 }
 
@@ -1195,6 +1201,30 @@ void OctomapServer::calculateTarget(){
         count ++;
       }
   }
+
+  //ROS_WARN_STREAM("pre: x :"<<fx<<
+  //                "pre: y :"<<fy<<
+  //                "pre: z :"<<fz);
+
+  //targetInput
+  fx += (targetInput.x() - originOnGrid.x()-offsetx*size)*100;
+  fy += (targetInput.y() - originOnGrid.y()-offsety*size)*100;
+  fz += (targetInput.z() - originOnGrid.z()-offsetz*size)*100;
+
+  //ROS_WARN_STREAM("key: x :"<<(targetInput.x() - originOnGrid.x()-offsetx*size)<<
+  //                "key: y :"<<(targetInput.y() - originOnGrid.y()-offsety*size)<<
+  //                "key: z :"<<(targetInput.z() - originOnGrid.z()-offsetz*size));
+
+  //ROS_WARN_STREAM("post: x :"<<fx<<
+  //                "post: y :"<<fy<<
+  //                "post: z :"<<fz);
+
+  //ROS_WARN_STREAM("key: x :"<<targetInput.x()<<
+  //                "key: y :"<<targetInput.y()<<
+  //                "key: z :"<<targetInput.z()<<
+  //                "key: x :"<<originOnGrid.x()+offsetx*size<<
+  //                "key: y :"<<originOnGrid.y()+offsety*size<<
+  //                "key: z :"<<originOnGrid.z()+offsetz*size);
 
   geometry_msgs::PoseStamped poseStamped;
   std_msgs::Header header;
