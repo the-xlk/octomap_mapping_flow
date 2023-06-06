@@ -277,6 +277,7 @@ protected:
   octomath::Vector3 targetInput;
   uint32_t targetSeq=0;
   int offsetx,offsety,offsetz;
+  ros::Time timeLastScan;
 
   double m_minRange;
   double m_maxRange;

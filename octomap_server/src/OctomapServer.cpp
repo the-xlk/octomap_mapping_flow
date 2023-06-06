@@ -207,6 +207,7 @@ OctomapServer::OctomapServer(const ros::NodeHandle private_nh_, const ros::NodeH
     flowMap2[i]={1,0,0,0,0,0,0};
   }
   offsetx,offsety,offsetz=0;
+  timeLastScan = ros::Time::now();
 }
 
 OctomapServer::~OctomapServer(){
@@ -608,7 +609,10 @@ void OctomapServer::insertScan(const tf::Point& sensorOriginTf, const PCLPointCl
   FlowCell prev;
   FlowCell constructed;
   octomap::OcTreeKey key;
-  movedCells.clear();
+  //movedCells.clear();
+  ros::Duration timeDelta= timeLastScan - ros::Time::now();
+  timeLastScan = ros::Time::now();
+  ROS_WARN_STREAM("frame time: " << timeDelta);
 
   for(int i=0; i< FLOW_GRID_L3; i++){
     int x = i%FLOW_GRID_L;
