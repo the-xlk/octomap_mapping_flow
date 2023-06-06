@@ -278,6 +278,8 @@ protected:
   uint32_t targetSeq=0;
   int offsetx,offsety,offsetz;
   ros::Time timeLastScan;
+  ros::Duration timeDelta;
+  float cellSize;
 
   double m_minRange;
   double m_maxRange;

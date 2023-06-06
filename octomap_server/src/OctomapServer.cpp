@@ -469,7 +469,7 @@ void OctomapServer::insertScan(const tf::Point& sensorOriginTf, const PCLPointCl
   }
 
   //!!!
-  float shift = m_octree->getNodeSize(m_treeDepth)/2;
+  cellSize = m_octree->getNodeSize(m_treeDepth);
   //!!!CURRENTLY UNUSED, change that?
   //shiftedOrigin = point3d(sensorOrigin.x()+shift,sensorOrigin.y()+shift,sensorOrigin.z()+shift);
   m_octree->coordToKeyChecked(sensorOrigin, origin);
@@ -533,9 +533,9 @@ void OctomapServer::insertScan(const tf::Point& sensorOriginTf, const PCLPointCl
   int deltaOffsety = offsety - newOffsety;
   int deltaOffsetz = offsetz - newOffsetz;
 
-  originOnGrid = point3d(sensorOrigin.x()-offsetx*shift*2,
-                        sensorOrigin.y()-offsety*shift*2,
-                        sensorOrigin.z()-offsetz*shift*2);
+  originOnGrid = point3d(sensorOrigin.x()-offsetx*cellSize,
+                        sensorOrigin.y()-offsety*cellSize,
+                        sensorOrigin.z()-offsetz*cellSize);
 
   //ROS_WARN("offset: %d %d %d", deltaOffsetx,deltaOffsety,deltaOffsetz);
         
@@ -610,7 +610,7 @@ void OctomapServer::insertScan(const tf::Point& sensorOriginTf, const PCLPointCl
   FlowCell constructed;
   octomap::OcTreeKey key;
   //movedCells.clear();
-  ros::Duration timeDelta= timeLastScan - ros::Time::now();
+  timeDelta = timeLastScan - ros::Time::now();
   timeLastScan = ros::Time::now();
   ROS_WARN_STREAM("frame time: " << timeDelta);
 
@@ -784,7 +784,12 @@ void OctomapServer::publishProjected2DMap(const ros::Time& rostime) {
 }
 
 float OctomapServer::velRatio(FlowCell prevState){
-  return 0.2+0.8*std::min(1.0f,(prevState.xs*prevState.xs+prevState.ys*prevState.ys+prevState.zs*prevState.zs) * 100);
+  //currently time and scale agnostic
+  //slow update: should displacements or speeds dictate sensitivity?? -> probably displacements
+  //large cells: should cell relative displacement be considered, or absolute? -> Probably cell specific: add width as factor.
+  //-->>> Make dependant on displacement relative to cell size
+  //return 0.2+0.8*std::min(1.0f,(prevState.xs*prevState.xs+prevState.ys*prevState.ys+prevState.zs*prevState.zs) * 100);
+  return 0.2+0.8*std::min(1.0f,(prevState.xs*prevState.xs+prevState.ys*prevState.ys+prevState.zs*prevState.zs) * 10000 * cellSize * cellSize);
 }
 
 void OctomapServer::publishAll(const ros::Time& rostime){
@@ -1193,7 +1198,7 @@ void OctomapServer::calculateTarget(){
         cz = (flowMap2[i].z+(i/FLOW_GRID_L2)-7.5f)*size;// - originOnGrid.z() - offsetz*size;
 
         sqr = cx * cx + cy * cy + cz * cz;
-        dot = cx * flowMap2[i].xs + cy * flowMap2[i].ys + cz * flowMap2[i].zs;
+        dot = (cx * flowMap2[i].xs + cy * flowMap2[i].ys + cz * flowMap2[i].zs) / timeDelta.nsec; //!!!???multiply by constant, average frame time
 
         fx += -cx * (1-dot*1000) / (sqr * sqr);
         fy += -cy * (1-dot*1000) / (sqr * sqr);
