@@ -610,9 +610,9 @@ void OctomapServer::insertScan(const tf::Point& sensorOriginTf, const PCLPointCl
   FlowCell constructed;
   octomap::OcTreeKey key;
   //movedCells.clear();
-  timeDelta = timeLastScan - ros::Time::now();
+  timeDelta =  ros::Time::now() - timeLastScan;
   timeLastScan = ros::Time::now();
-  ROS_WARN_STREAM("frame time: " << timeDelta);
+  ROS_WARN_STREAM("frame time: " << timeDelta.nsec);
 
   for(int i=0; i< FLOW_GRID_L3; i++){
     int x = i%FLOW_GRID_L;
@@ -1198,7 +1198,7 @@ void OctomapServer::calculateTarget(){
         cz = (flowMap2[i].z+(i/FLOW_GRID_L2)-7.5f)*size;// - originOnGrid.z() - offsetz*size;
 
         sqr = cx * cx + cy * cy + cz * cz;
-        dot = (cx * flowMap2[i].xs + cy * flowMap2[i].ys + cz * flowMap2[i].zs) / timeDelta.nsec; //!!!???multiply by constant, average frame time
+        dot = (cx * flowMap2[i].xs + cy * flowMap2[i].ys + cz * flowMap2[i].zs)*0.06f / timeDelta.toSec(); //!!!???multiply by constant, average frame time
 
         fx += -cx * (1-dot*1000) / (sqr * sqr);
         fy += -cy * (1-dot*1000) / (sqr * sqr);

@@ -17,7 +17,9 @@
 		<param name="sensor_model/max_range" value="5.0" />
 		
 		<!-- data source to integrate (PointCloud2) -->
-		<remap from="cloud_in" to="/zedm/zed_node/point_cloud/cloud_registered" />
+		<remap from="cloud_in" to="/zedm/zed_node/point_cloud/cloud_registered" /><!-->
+
+		<!<remap from="cloud_in" to="/voxel_cloud" /><!-->
 	
 	</node>
 </launch>
