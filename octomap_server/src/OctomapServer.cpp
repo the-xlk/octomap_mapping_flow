@@ -612,7 +612,7 @@ void OctomapServer::insertScan(const tf::Point& sensorOriginTf, const PCLPointCl
   //movedCells.clear();
   timeDelta =  ros::Time::now() - timeLastScan;
   timeLastScan = ros::Time::now();
-  ROS_WARN_STREAM("frame time: " << timeDelta.nsec);
+  ROS_WARN_STREAM("frame time: " << timeDelta.toSec());
 
   for(int i=0; i< FLOW_GRID_L3; i++){
     int x = i%FLOW_GRID_L;
