@@ -377,7 +377,7 @@ void OctomapServer::insertCloudCallback(const sensor_msgs::PointCloud2::ConstPtr
 }
 
 void OctomapServer::insertScan(const tf::Point& sensorOriginTf, const PCLPointCloud& ground, const PCLPointCloud& nonground){
-  point3d sensorOrigin = pointTfToOctomap(sensorOriginTf);
+  sensorOrigin = pointTfToOctomap(sensorOriginTf);
 
   if (!m_octree->coordToKeyChecked(sensorOrigin, m_updateBBXMin)
     || !m_octree->coordToKeyChecked(sensorOrigin, m_updateBBXMax))
@@ -1198,7 +1198,7 @@ void OctomapServer::calculateTarget(){
         cz = (flowMap2[i].z+(i/FLOW_GRID_L2)-7.5f)*size;// - originOnGrid.z() - offsetz*size;
 
         sqr = cx * cx + cy * cy + cz * cz;
-        dot = (cx * flowMap2[i].xs + cy * flowMap2[i].ys + cz * flowMap2[i].zs)*0.06f / timeDelta.toSec(); //!!!???multiply by constant, average frame time
+        dot = std::min(0.0,(cx * flowMap2[i].xs + cy * flowMap2[i].ys + cz * flowMap2[i].zs)*0.06f / timeDelta.toSec()); //!!!???multiply by constant, average frame time
 
         fx += -cx * (1-dot*1000) / (sqr * sqr);
         fy += -cy * (1-dot*1000) / (sqr * sqr);
@@ -1215,10 +1215,17 @@ void OctomapServer::calculateTarget(){
   //                "pre: y :"<<fy<<
   //                "pre: z :"<<fz);
 
+  
+
   //targetInput
-  fx += (targetInput.x() - originOnGrid.x()-offsetx*size)*100;
-  fy += (targetInput.y() - originOnGrid.y()-offsety*size)*100;
-  fz += (targetInput.z() - originOnGrid.z()-offsetz*size)*100;
+  if(targetSet){
+    fx += (targetInput.x() - originOnGrid.x()-offsetx*size)*100;
+    fy += (targetInput.y() - originOnGrid.y()-offsety*size)*100;
+    fz += (targetInput.z() - originOnGrid.z()-offsetz*size)*100;
+  }
+  ROS_WARN_STREAM("target: x :"<<fx<<
+                "target: y :"<<fy<<
+                "target: z :"<<fz); 
 
   //ROS_WARN_STREAM("key: x :"<<(targetInput.x() - originOnGrid.x()-offsetx*size)<<
   //                "key: y :"<<(targetInput.y() - originOnGrid.y()-offsety*size)<<
@@ -1241,9 +1248,13 @@ void OctomapServer::calculateTarget(){
   geometry_msgs::Point point;
   geometry_msgs::Quaternion quaternion;
 
-  point.x = originOnGrid.x()+offsetx*size+fx/1000;//+(fx*100)/count;//generally correct
-  point.y = originOnGrid.y()+offsety*size+fy/1000;//+(fy*100)/count;
-  point.z = originOnGrid.z()+offsetz*size+fz/1000;//+(fz*100)/count;
+  //point.x = originOnGrid.x()+offsetx*size+fx/100;//+(fx*100)/count;//generally correct
+  //point.y = originOnGrid.y()+offsety*size+fy/100;//+(fy*100)/count;
+  //point.z = originOnGrid.z()+offsetz*size+fz/100;//+(fz*100)/count;
+
+  point.x = sensorOrigin.x()+fx/30;//+(fx*100)/count;//generally correct
+  point.y = sensorOrigin.y()+fy/30;//+(fy*100)/count;
+  point.z = sensorOrigin.z()+fz/30;//+(fz*100)/count;
 
   //point.x = fx*100;//generally correct
   //point.y = fy*100;

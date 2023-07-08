@@ -275,6 +275,8 @@ protected:
   octomath::Vector3 shiftedOrigin;
   octomath::Vector3 originOnGrid;
   octomath::Vector3 targetInput;
+  bool targetSet = false;
+  octomap::point3d sensorOrigin;
   uint32_t targetSeq=0;
   int offsetx,offsety,offsetz;
   ros::Time timeLastScan;

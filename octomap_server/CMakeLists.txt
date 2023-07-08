@@ -68,6 +68,12 @@ target_link_libraries(octomap_saver ${PROJECT_NAME} ${LINK_LIBS})
 add_executable(octomap_tracking_server_node src/octomap_tracking_server_node.cpp)
 target_link_libraries(octomap_tracking_server_node ${PROJECT_NAME} ${LINK_LIBS})
 
+add_executable(offb_node src/offb_node.cpp)
+target_link_libraries(offb_node ${PROJECT_NAME} ${LINK_LIBS})
+
+add_executable(rcOverride src/rcOverride.cpp)
+target_link_libraries(rcOverride ${PROJECT_NAME} ${LINK_LIBS})
+
 # Nodelet
 add_library(octomap_server_nodelet src/octomap_server_nodelet.cpp)
 target_link_libraries(octomap_server_nodelet ${PROJECT_NAME} ${LINK_LIBS})
@@ -83,6 +89,7 @@ install(TARGETS ${PROJECT_NAME} ${PROJECT_NAME}_color
   octomap_server_multilayer
   octomap_saver
   octomap_tracking_server_node
+  offb_node
   octomap_server_nodelet
   octomap_color_server_nodelet
   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
