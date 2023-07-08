@@ -25,7 +25,7 @@
  * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
- */
+ */ 
 
 #include <octomap_server/OctomapServer.h>
 
@@ -182,8 +182,8 @@ OctomapServer::OctomapServer(const ros::NodeHandle private_nh_, const ros::NodeH
   m_pointCloudPub = m_nh.advertise<sensor_msgs::PointCloud2>("octomap_point_cloud_centers", 1, m_latchedTopics);
   m_mapPub = m_nh.advertise<nav_msgs::OccupancyGrid>("projected_map", 5, m_latchedTopics);
   m_fmarkerPub = m_nh.advertise<visualization_msgs::MarkerArray>("free_cells_vis_array", 1, m_latchedTopics);
-  m_ftargetPub = m_nh.advertise<geometry_msgs::PoseStamped>("target_pose", 1, m_latchedTopics);
-
+  m_ftargetPub = m_nh.advertise<geometry_msgs::PoseStamped>("testing/setpoint_position/local", 1, m_latchedTopics);
+                                                          //mavros/setpoint_position/local
   m_pointCloudSub = new message_filters::Subscriber<sensor_msgs::PointCloud2> (m_nh, "cloud_in", 5);
   m_tfPointCloudSub = new tf::MessageFilter<sensor_msgs::PointCloud2> (*m_pointCloudSub, m_tfListener, m_worldFrameId, 5);
   m_tfPointCloudSub->registerCallback(boost::bind(&OctomapServer::insertCloudCallback, this, boost::placeholders::_1));
@@ -208,6 +208,7 @@ OctomapServer::OctomapServer(const ros::NodeHandle private_nh_, const ros::NodeH
   }
   offsetx,offsety,offsetz=0;
   timeLastScan = ros::Time::now();
+  timeLastFcount = ros::Time::now();
 }
 
 OctomapServer::~OctomapServer(){
@@ -612,7 +613,13 @@ void OctomapServer::insertScan(const tf::Point& sensorOriginTf, const PCLPointCl
   //movedCells.clear();
   timeDelta =  ros::Time::now() - timeLastScan;
   timeLastScan = ros::Time::now();
-  ROS_WARN_STREAM("frame time: " << timeDelta.toSec());
+  frameCount++;
+  if (frameCount >99){
+    frameCount=0;
+    ROS_WARN_STREAM("frame rate over last 100 frames: " << 100.0/(ros::Time::now() - timeLastFcount).toSec());
+    timeLastFcount = ros::Time::now();
+  }
+  
 
   for(int i=0; i< FLOW_GRID_L3; i++){
     int x = i%FLOW_GRID_L;
@@ -789,7 +796,7 @@ float OctomapServer::velRatio(FlowCell prevState){
   //large cells: should cell relative displacement be considered, or absolute? -> Probably cell specific: add width as factor.
   //-->>> Make dependant on displacement relative to cell size
   //return 0.2+0.8*std::min(1.0f,(prevState.xs*prevState.xs+prevState.ys*prevState.ys+prevState.zs*prevState.zs) * 100);
-  return 0.2+0.8*std::min(1.0f,(prevState.xs*prevState.xs+prevState.ys*prevState.ys+prevState.zs*prevState.zs) * 10000 * cellSize * cellSize);
+  return 0.2+0.8*std::min(1.0f,(prevState.xs*prevState.xs+prevState.ys*prevState.ys+prevState.zs*prevState.zs)/(cellSize*cellSize));// * 10000 * cellSize * cellSize);
 }
 
 void OctomapServer::publishAll(const ros::Time& rostime){
@@ -1093,9 +1100,9 @@ void OctomapServer::publishAll(const ros::Time& rostime){
         //cubeCenter.y = ((i/16)%16)*size;//+offsety;
         //cubeCenter.z = ((i/256)%16)*size;//+offsetz;
         flowNodesVis.markers[0].points.push_back(cubeCenter);
-        col.r=0.5 + flowMap2[i].xs*10;
-        col.g=0.5 + flowMap2[i].ys*10;
-        col.b=0.5 + flowMap2[i].zs*10;
+        col.r=0.5 + flowMap2[i].xs/cellSize;
+        col.g=0.5 + flowMap2[i].ys/cellSize;
+        col.b=0.5 + flowMap2[i].zs/cellSize;
         flowNodesVis.markers[0].colors.push_back(col);
         /*if (m_useHeightMap){
           double minX, minY, minZ, maxX, maxY, maxZ;
@@ -1198,11 +1205,11 @@ void OctomapServer::calculateTarget(){
         cz = (flowMap2[i].z+(i/FLOW_GRID_L2)-7.5f)*size;// - originOnGrid.z() - offsetz*size;
 
         sqr = cx * cx + cy * cy + cz * cz;
-        dot = (cx * flowMap2[i].xs + cy * flowMap2[i].ys + cz * flowMap2[i].zs)*0.06f / timeDelta.toSec(); //!!!???multiply by constant, average frame time
+        dot = std::min(0.0,(cx * flowMap2[i].xs + cy * flowMap2[i].ys + cz * flowMap2[i].zs)*0.06f / timeDelta.toSec()); //!!!???multiply by constant, average frame time
 
-        fx += -cx * (1-dot*1000) / (sqr * sqr);
-        fy += -cy * (1-dot*1000) / (sqr * sqr);
-        fz += -cz * (1-dot*1000) / (sqr * sqr);
+        fx += -cx * (1-dot*500) / (sqr * sqr);
+        fy += -cy * (1-dot*500) / (sqr * sqr);
+        fz += -cz * (1-dot*500) / (sqr * sqr);
 
         //fx += cx;
         //fy += cy;
@@ -1241,9 +1248,9 @@ void OctomapServer::calculateTarget(){
   geometry_msgs::Point point;
   geometry_msgs::Quaternion quaternion;
 
-  point.x = originOnGrid.x()+offsetx*size+fx/1000;//+(fx*100)/count;//generally correct
-  point.y = originOnGrid.y()+offsety*size+fy/1000;//+(fy*100)/count;
-  point.z = originOnGrid.z()+offsetz*size+fz/1000;//+(fz*100)/count;
+  point.x = originOnGrid.x()+offsetx*size+fx/500;//+(fx*100)/count;//generally correct
+  point.y = originOnGrid.y()+offsety*size+fy/500;//+(fy*100)/count;
+  point.z = originOnGrid.z()+offsetz*size+fz/500;//+(fz*100)/count;
 
   //point.x = fx*100;//generally correct
   //point.y = fy*100;
@@ -1259,7 +1266,7 @@ void OctomapServer::calculateTarget(){
 
   poseStamped.pose = pose;
 
-  header.frame_id="map";
+  header.frame_id="odom";
   header.stamp = ros::Time::now();
   header.seq = targetSeq++;
   poseStamped.header=header;

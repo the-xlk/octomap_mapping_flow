@@ -224,9 +224,13 @@ protected:
   octomap::OcTreeKey m_updateBBXMax;
 
   //!!!
-  #define FLOW_GRID_L 16
-  #define FLOW_GRID_L2 256
-  #define FLOW_GRID_L3 4096
+  #define FLOW_GRID_L 32
+  #define FLOW_GRID_L2 1024
+  #define FLOW_GRID_L3 32768
+
+  //#define FLOW_GRID_L 16
+  //#define FLOW_GRID_L2 256
+  //#define FLOW_GRID_L3 4096
 
   // sampling ratio when updating a cell or spawning an occupied cell.
   // P is the contribution of the change in observed position, V is the contribution of the momentum of previously observed speed.
@@ -278,7 +282,9 @@ protected:
   uint32_t targetSeq=0;
   int offsetx,offsety,offsetz;
   ros::Time timeLastScan;
+  ros::Time timeLastFcount;
   ros::Duration timeDelta;
+  int frameCount=0;
   float cellSize;
 
   double m_minRange;
