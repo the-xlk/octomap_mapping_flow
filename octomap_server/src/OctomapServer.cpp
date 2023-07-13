@@ -115,6 +115,17 @@ OctomapServer::OctomapServer(const ros::NodeHandle private_nh_, const ros::NodeH
   m_nh_private.param("compress_map", m_compressMap, m_compressMap);
   m_nh_private.param("incremental_2D_projection", m_incrementalUpdate, m_incrementalUpdate);
 
+  m_nh_private.param("repScale", repScale, repScale);
+  m_nh_private.param("velScale", velScale, velScale);
+  m_nh_private.param("lowThresh", lowThresh, lowThresh);
+  m_nh_private.param("highThresh", highThresh, highThresh);
+  threshScale=1.0/(-highThresh);
+  threshOffset= 1-lowThresh*threshScale;
+  ROS_WARN_STREAM("low: "<<lowThresh<<" high: "<<highThresh);
+  ROS_WARN_STREAM("offse: "<<threshOffset<<" scale: "<<threshScale);
+  m_nh_private.param("velOffsetScale", velOffsetScale, velOffsetScale);
+
+
   if (m_filterGroundPlane && (m_pointcloudMinZ > 0.0 || m_pointcloudMaxZ < 0.0)){
     ROS_WARN_STREAM("You enabled ground filtering but incoming pointclouds will be pre-filtered in ["
               <<m_pointcloudMinZ <<", "<< m_pointcloudMaxZ << "], excluding the ground level z=0. "
@@ -182,7 +193,7 @@ OctomapServer::OctomapServer(const ros::NodeHandle private_nh_, const ros::NodeH
   m_pointCloudPub = m_nh.advertise<sensor_msgs::PointCloud2>("octomap_point_cloud_centers", 1, m_latchedTopics);
   m_mapPub = m_nh.advertise<nav_msgs::OccupancyGrid>("projected_map", 5, m_latchedTopics);
   m_fmarkerPub = m_nh.advertise<visualization_msgs::MarkerArray>("free_cells_vis_array", 1, m_latchedTopics);
-  m_ftargetPub = m_nh.advertise<geometry_msgs::PoseStamped>("testing/setpoint_position/local", 1, m_latchedTopics);
+  m_ftargetPub = m_nh.advertise<geometry_msgs::PoseStamped>("target_pose", 1, m_latchedTopics);
                                                           //mavros/setpoint_position/local
   m_pointCloudSub = new message_filters::Subscriber<sensor_msgs::PointCloud2> (m_nh, "cloud_in", 5);
   m_tfPointCloudSub = new tf::MessageFilter<sensor_msgs::PointCloud2> (*m_pointCloudSub, m_tfListener, m_worldFrameId, 5);
@@ -378,7 +389,7 @@ void OctomapServer::insertCloudCallback(const sensor_msgs::PointCloud2::ConstPtr
 }
 
 void OctomapServer::insertScan(const tf::Point& sensorOriginTf, const PCLPointCloud& ground, const PCLPointCloud& nonground){
-  point3d sensorOrigin = pointTfToOctomap(sensorOriginTf);
+  sensorOrigin = pointTfToOctomap(sensorOriginTf);
 
   if (!m_octree->coordToKeyChecked(sensorOrigin, m_updateBBXMin)
     || !m_octree->coordToKeyChecked(sensorOrigin, m_updateBBXMax))
@@ -471,9 +482,8 @@ void OctomapServer::insertScan(const tf::Point& sensorOriginTf, const PCLPointCl
 
   //!!!
   cellSize = m_octree->getNodeSize(m_treeDepth);
-  //!!!CURRENTLY UNUSED, change that?
-  //shiftedOrigin = point3d(sensorOrigin.x()+shift,sensorOrigin.y()+shift,sensorOrigin.z()+shift);
-  m_octree->coordToKeyChecked(sensorOrigin, origin);
+  shiftedOrigin = point3d(sensorOrigin.x()+cellSize/2,sensorOrigin.y()+cellSize/2,sensorOrigin.z()+cellSize/2);// + beacuse -L/2 ends on corner
+  m_octree->coordToKeyChecked(shiftedOrigin, shiftedKey);
 
   // now mark all occupied cells:
   for (auto it : occupiedFloatingCells) {
@@ -525,18 +535,19 @@ void OctomapServer::insertScan(const tf::Point& sensorOriginTf, const PCLPointCl
   }
 #endif
 
-  //!!!
-  int newOffsetx = (int)((origin)[0])-8;//!!! 16/2
-  int newOffsety = (int)((origin)[1])-8;
-  int newOffsetz = (int)((origin)[2])-8;
+  int newOffsetx = (int)((shiftedKey)[0])-FLOW_GRID_L/2;
+  int newOffsety = (int)((shiftedKey)[1])-FLOW_GRID_L/2;
+  int newOffsetz = (int)((shiftedKey)[2])-FLOW_GRID_L/2;
 
   int deltaOffsetx = offsetx - newOffsetx;
   int deltaOffsety = offsety - newOffsety;
   int deltaOffsetz = offsetz - newOffsetz;
 
-  originOnGrid = point3d(sensorOrigin.x()-offsetx*cellSize,
-                        sensorOrigin.y()-offsety*cellSize,
-                        sensorOrigin.z()-offsetz*cellSize);
+  float a=1; //neccesary output???
+  originOnGrid = octomath::Vector3(
+                  cellSize*(modf(shiftedOrigin.x()/cellSize,&a)+FLOW_GRID_L/2-1),
+                  cellSize*(modf(shiftedOrigin.y()/cellSize,&a)+FLOW_GRID_L/2-1),
+                  cellSize*(modf(shiftedOrigin.z()/cellSize,&a)+FLOW_GRID_L/2-1));
 
   //ROS_WARN("offset: %d %d %d", deltaOffsetx,deltaOffsety,deltaOffsetz);
         
@@ -1196,20 +1207,30 @@ void OctomapServer::calculateTargetCallback(const geometry_msgs::PoseStamped::Co
 void OctomapServer::calculateTarget(){
   double size = m_octree->getNodeSize(m_maxTreeDepth);
   //originOnGrid, starting at grid corner 0,0,0
-  float fx=0, fy=0, fz=0, cx=0, cy=0, cz=0, dot=0, sqr = 0;
+  float fx=0, fy=0, fz=0, cx=0, cy=0, cz=0, dot=0, sqr = 0, dampen =1;
   float count = 0;
   for (int i=0; i< FLOW_GRID_L3; i++) {
       if (flowMap2[i].state>2){
-        cx = (flowMap2[i].x+(i%FLOW_GRID_L)-7.5f)*size;// - originOnGrid.x() - offsetx*size;
-        cy = (flowMap2[i].y+((i/FLOW_GRID_L)%FLOW_GRID_L)-7.5f)*size;// - originOnGrid.y() - offsety*size;
-        cz = (flowMap2[i].z+(i/FLOW_GRID_L2)-7.5f)*size;// - originOnGrid.z() - offsetz*size;
+        cx = (flowMap2[i].x+(i%FLOW_GRID_L))*size - originOnGrid.x();
+        cy = (flowMap2[i].y+((i/FLOW_GRID_L)%FLOW_GRID_L))*size - originOnGrid.y();
+        cz = (flowMap2[i].z+(i/FLOW_GRID_L2))*size - originOnGrid.z();
 
         sqr = cx * cx + cy * cy + cz * cz;
         dot = std::min(0.0,(cx * flowMap2[i].xs + cy * flowMap2[i].ys + cz * flowMap2[i].zs)*0.06f / timeDelta.toSec()); //!!!???multiply by constant, average frame time
+        
+        //from sqrt(2)m to sqrt(2.5)m dampen repulsion force. Offset with dot factor
+        dampen= std::min(1.0f,std::max(0.0f,(threshOffset + (sqr + dot * velOffsetScale) * threshScale) ));
+        
+        fx += -cx * (1-dot*velScale) / (sqr * sqr) * dampen;
+        fy += -cy * (1-dot*velScale) / (sqr * sqr) * dampen;
+        fz += -cz * (1-dot*velScale) / (sqr * sqr) * dampen;
 
-        fx += -cx * (1-dot*500) / (sqr * sqr);
-        fy += -cy * (1-dot*500) / (sqr * sqr);
-        fz += -cz * (1-dot*500) / (sqr * sqr);
+        //if(dot < -0.05){
+        //  ROS_WARN_STREAM("--dot: "<<dot<<" sqr: "<<sqr<<" dampen: "<<dampen<<"\nx: "<<
+        //    -cx * (1-dot*velScale) / (sqr * sqr) * dampen<<" y: "<<
+        //    -cy * (1-dot*velScale) / (sqr * sqr) * dampen<<" z: "<<
+        //    -cz * (1-dot*velScale) / (sqr * sqr) * dampen);
+        //}
 
         //fx += cx;
         //fy += cy;
@@ -1223,9 +1244,9 @@ void OctomapServer::calculateTarget(){
   //                "pre: z :"<<fz);
 
   //targetInput
-  fx += (targetInput.x() - originOnGrid.x()-offsetx*size)*100;
-  fy += (targetInput.y() - originOnGrid.y()-offsety*size)*100;
-  fz += (targetInput.z() - originOnGrid.z()-offsetz*size)*100;
+  //fx += (targetInput.x() - originOnGrid.x()-offsetx*size)*100;
+  //fy += (targetInput.y() - originOnGrid.y()-offsety*size)*100;
+  //fz += (targetInput.z() - originOnGrid.z()-offsetz*size)*100;
 
   //ROS_WARN_STREAM("key: x :"<<(targetInput.x() - originOnGrid.x()-offsetx*size)<<
   //                "key: y :"<<(targetInput.y() - originOnGrid.y()-offsety*size)<<
@@ -1248,9 +1269,9 @@ void OctomapServer::calculateTarget(){
   geometry_msgs::Point point;
   geometry_msgs::Quaternion quaternion;
 
-  point.x = originOnGrid.x()+offsetx*size+fx/500;//+(fx*100)/count;//generally correct
-  point.y = originOnGrid.y()+offsety*size+fy/500;//+(fy*100)/count;
-  point.z = originOnGrid.z()+offsetz*size+fz/500;//+(fz*100)/count;
+  point.x = sensorOrigin.x()+fx/repScale;//+(fx*100)/count;//generally correct
+  point.y = sensorOrigin.y()+fy/repScale;//+(fy*100)/count;
+  point.z = sensorOrigin.z()+fz/repScale;//+(fz*100)/count;
 
   //point.x = fx*100;//generally correct
   //point.y = fy*100;

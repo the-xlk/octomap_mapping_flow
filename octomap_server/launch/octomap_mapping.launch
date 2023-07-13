@@ -20,6 +20,13 @@
 		<!--<remap from="cloud_in" to="/zedm/zed_node/point_cloud/cloud_registered" />-->
 
 		<remap from="cloud_in" to="/output_cloud" />
+
+		<param name="repScale" value="250.0" /><!-- 100 -->
+  		<param name="velScale" value="500.0" />
+  		<param name="lowThresh" value="1.0" />
+  		<param name="highThresh" value="1.5" />
+		<param name="velOffsetScale" value="20.0" />
+
 	
 	</node>
 </launch>

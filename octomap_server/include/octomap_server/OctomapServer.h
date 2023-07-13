@@ -70,6 +70,7 @@
 #include <octomap_ros/conversions.h>
 #include <octomap/octomap.h>
 #include <octomap/OcTreeKey.h>
+#include <math.h>
 
 //#define COLOR_OCTOMAP_SERVER // switch color here - easier maintenance, only maintain OctomapServer. Two targets are defined in the cmake, octomap_server_color and octomap_server. One has this defined, and the other doesn't
 
@@ -275,10 +276,11 @@ protected:
   FlowCell *flowMap2 = b2;
   float velRatio(FlowCell prevState);
   
-  octomap::OcTreeKey origin;
+  octomap::OcTreeKey shiftedKey;
   octomath::Vector3 shiftedOrigin;
   octomath::Vector3 originOnGrid;
   octomath::Vector3 targetInput;
+  octomap::point3d sensorOrigin;
   uint32_t targetSeq=0;
   int offsetx,offsety,offsetz;
   ros::Time timeLastScan;
@@ -286,6 +288,13 @@ protected:
   ros::Duration timeDelta;
   int frameCount=0;
   float cellSize;
+  float repScale;
+  float velScale;
+  float highThresh;
+  float lowThresh;
+  float threshScale;
+  float threshOffset;
+  float velOffsetScale;
 
   double m_minRange;
   double m_maxRange;
