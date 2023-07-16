@@ -7,6 +7,12 @@
   www.ros.org/wiki/octomap_server for details  
 -->
 <launch>
+
+	<include file="$(find realsense2_camera)/launch/custom_tracking.launch"/>
+	<include file="$(find mavros)/launch/px4.launch"/>
+	<node pkg="octomap_server" type="odom_to_pose" name="odom_to_pose"/>
+	<node pkg="octomap_server" type="rcOverride" name="rcOverride"/>
+
 	<node pkg="octomap_server" type="octomap_server_node" name="octomap_server">
 		<param name="resolution" value="0.2" />
 		
@@ -21,10 +27,10 @@
 
 		<remap from="cloud_in" to="/output_cloud" />
 
-		<param name="repScale" value="250.0" /><!-- 100 -->
+		<param name="repScale" value="50.0" /><!-- 100 -->
   		<param name="velScale" value="500.0" />
-  		<param name="lowThresh" value="1.0" />
-  		<param name="highThresh" value="1.5" />
+  		<param name="lowThresh" value="1.5" />
+  		<param name="highThresh" value="2.0" />
 		<param name="velOffsetScale" value="20.0" />
 
 	

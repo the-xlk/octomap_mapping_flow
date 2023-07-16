@@ -21,9 +21,10 @@ geometry_msgs::PoseStamped droneTarget;
 geometry_msgs::PoseStamped pubTarget;
 mavros_msgs::RCIn input;
 bool recievedTarget =false;
+bool recievedInput =false;
 ros::Publisher manualOverride;
 float yaw =0;
-tf2::Quaternion myQuaternion;
+tf::Quaternion myQuaternion;
 
 //mavros_msgs::State current_state;
 //void state_cb(const mavros_msgs::State::ConstPtr& msg){
@@ -38,6 +39,7 @@ void updateTarget(const geometry_msgs::PoseStamped::ConstPtr& msg){
 
 void overrideRC(const mavros_msgs::RCIn::ConstPtr& msg){
     input = *msg;
+    recievedInput=true;
     //ROS_WARN_STREAM("joystic input");
     
     //ROS_WARN_STREAM("drone: x :"<< droneTarget.point.x<<
@@ -79,14 +81,27 @@ int main(int argc, char **argv)
 
     // wait for FCU connection
     while(ros::ok()){
-        if(recievedTarget){
+        if(recievedTarget && recievedInput){
             //ROS_WARN_STREAM("sending");
-            yaw -= (((float)input.channels[0])-512.0)/5120.0;
+            //yaw -= (((float)input.channels[0])-1494.0f)/51200.0f;
+            myQuaternion.setRPY(0,0,-(((float)input.channels[0])-1494.0f)/512.0f+M_PI/2);
+            tf::Quaternion tempQuat;
+            tempQuat.setValue(droneTarget.pose.orientation.x,
+                              droneTarget.pose.orientation.y,
+                              droneTarget.pose.orientation.z,
+                              droneTarget.pose.orientation.w);
+            myQuaternion = myQuaternion*tempQuat;
+            myQuaternion.normalize();
+            tf::Matrix3x3 m(myQuaternion);
+            double roll, pitch, yaw;
+            m.getRPY(roll, pitch, yaw);
+
             pubTarget = droneTarget;
-            float x = (((float)input.channels[2])-512.0)/512.0;
-            float y = (((float)input.channels[3])-512.0)/512.0;
-            float z = (((float)input.channels[1])-512.0)/512.0;
+            float x = (((float)input.channels[2])-1494.0f)/512.0f;
+            float y = (((float)input.channels[3])-1494.0f)/512.0f;
+            float z = (((float)input.channels[1])-1494.0f)/512.0f;
             
+            //ROS_WARN_STREAM("in yaw "<<(float)input.channels[0]<<" centered "<<(float)input.channels[0]-1494.0f<<" normalized "<<(((float)input.channels[0])-1494.0f)/512.0f);
             pubTarget.pose.position.x+=x*cos(yaw)+sin(yaw)*y;
             pubTarget.pose.position.y+=-y*cos(yaw)+sin(yaw)*x;
             pubTarget.pose.position.z+=z;

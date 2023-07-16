@@ -281,6 +281,8 @@ protected:
   octomath::Vector3 originOnGrid;
   octomath::Vector3 targetInput;
   octomap::point3d sensorOrigin;
+  tf::Quaternion sensorQuaternion;
+
   uint32_t targetSeq=0;
   int offsetx,offsety,offsetz;
   ros::Time timeLastScan;

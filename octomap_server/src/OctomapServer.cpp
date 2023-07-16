@@ -379,7 +379,7 @@ void OctomapServer::insertCloudCallback(const sensor_msgs::PointCloud2::ConstPtr
     pc_nonground.header = pc.header;
   }
 
-
+  sensorQuaternion = sensorToWorldTf.getRotation();
   insertScan(sensorToWorldTf.getOrigin(), pc_ground, pc_nonground);
 
   double total_elapsed = (ros::WallTime::now() - startTime).toSec();
@@ -1272,15 +1272,22 @@ void OctomapServer::calculateTarget(){
   point.x = sensorOrigin.x()+fx/repScale;//+(fx*100)/count;//generally correct
   point.y = sensorOrigin.y()+fy/repScale;//+(fy*100)/count;
   point.z = sensorOrigin.z()+fz/repScale;//+(fz*100)/count;
-
+  
   //point.x = fx*100;//generally correct
   //point.y = fy*100;
   //point.z = fz*100;  
 
-  quaternion.x=1;
-  quaternion.y=0;
-  quaternion.z=0;
-  quaternion.w=0;
+  //quaternion.x=1;
+  //quaternion.y=0;
+  //quaternion.z=0;
+  //quaternion.w=0;
+
+  quaternion.x=sensorQuaternion.getX();
+  quaternion.y=sensorQuaternion.getY();
+  quaternion.z=sensorQuaternion.getZ();
+  quaternion.w=sensorQuaternion.getW();
+
+  //quaternion = sensorQuaternion;
 
   pose.position = point;
   pose.orientation = quaternion;
