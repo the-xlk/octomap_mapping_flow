@@ -23,7 +23,7 @@
  * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
  * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
  * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS target, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */ 
 
@@ -208,6 +208,8 @@ OctomapServer::OctomapServer(const ros::NodeHandle private_nh_, const ros::NodeH
   m_clearBBXService = m_nh_private.advertiseService("clear_bbx", &OctomapServer::clearBBXSrv, this);
   m_resetService = m_nh_private.advertiseService("reset", &OctomapServer::resetSrv, this);
 
+  m_peaks =  m_nh.advertise<std_msgs::Float32MultiArray>("peaks_of_speed", 1, m_latchedTopics);
+
   dynamic_reconfigure::Server<OctomapServerConfig>::CallbackType f;
   f = boost::bind(&OctomapServer::reconfigureCallback, this, boost::placeholders::_1, boost::placeholders::_2);
   m_reconfigureServer.setCallback(f);
@@ -220,6 +222,14 @@ OctomapServer::OctomapServer(const ros::NodeHandle private_nh_, const ros::NodeH
   offsetx,offsety,offsetz=0;
   timeLastScan = ros::Time::now();
   timeLastFcount = ros::Time::now();
+  std_msgs::MultiArrayLayout layout;
+  layout.data_offset=0;
+  layout.dim[0].size = 4;
+  layout.dim[0].stride = 1; 
+  layout.dim[0].label = "peaks"; 
+  msg.layout= layout;
+  std::vector<float>  vec;
+  msg.data=vec ;//(float *)malloc(sizeof(float)*4);
 }
 
 OctomapServer::~OctomapServer(){
@@ -1207,7 +1217,7 @@ void OctomapServer::calculateTargetCallback(const geometry_msgs::PoseStamped::Co
 void OctomapServer::calculateTarget(){
   double size = m_octree->getNodeSize(m_maxTreeDepth);
   //originOnGrid, starting at grid corner 0,0,0
-  float fx=0, fy=0, fz=0, cx=0, cy=0, cz=0, dot=0, sqr = 0, dampen =1;
+  float fx=0, fy=0, fz=0, cx=0, cy=0, cz=0, dot=0, sqr = 0, dampen =1, maxV =0, vD=0, maxVD=0, minD=0;
   float count = 0;
   for (int i=0; i< FLOW_GRID_L3; i++) {
       if (flowMap2[i].state>2){
@@ -1216,8 +1226,10 @@ void OctomapServer::calculateTarget(){
         cz = (flowMap2[i].z+(i/FLOW_GRID_L2))*size - originOnGrid.z();
 
         sqr = cx * cx + cy * cy + cz * cz;
+        float v = (flowMap2[i].xs*flowMap2[i].xs+flowMap2[i].ys*flowMap2[i].ys+flowMap2[i].zs*flowMap2[i].zs)/ timeDelta.toSec();
+        if(v>maxV){maxV=v;vD=sqr;}
         dot = std::min(0.0,(cx * flowMap2[i].xs + cy * flowMap2[i].ys + cz * flowMap2[i].zs)*0.06f / timeDelta.toSec()); //!!!???multiply by constant, average frame time
-        
+        if(dot<minD){minD=dot;maxVD=v;}
         //from sqrt(2)m to sqrt(2.5)m dampen repulsion force. Offset with dot factor
         dampen= std::min(1.0f,std::max(0.0f,(threshOffset + (sqr + dot * velOffsetScale) * threshScale) ));
         
@@ -1239,9 +1251,15 @@ void OctomapServer::calculateTarget(){
       }
   }
 
-  //ROS_WARN_STREAM("pre: x :"<<fx<<
-  //                "pre: y :"<<fy<<
-  //                "pre: z :"<<fz);
+  msg.data[0]=maxV;
+  msg.data[1]=vD;
+  msg.data[2]=maxVD;
+  msg.data[3]=minD;
+
+  m_peaks.publish(msg);
+  
+  
+  //ROS_WARN_STREAM("max speed squared= "<<maxV<<" max speed towards drone= "<<maxVD);
 
   //targetInput
   //fx += (targetInput.x() - originOnGrid.x()-offsetx*size)*100;

@@ -29,8 +29,8 @@
 
 		<param name="repScale" value="50.0" /><!-- 100 -->
   		<param name="velScale" value="500.0" />
-  		<param name="lowThresh" value="1.5" />
-  		<param name="highThresh" value="2.0" />
+  		<param name="lowThresh" value="1.0" />
+  		<param name="highThresh" value="1.5" />
 		<param name="velOffsetScale" value="20.0" />
 
 	

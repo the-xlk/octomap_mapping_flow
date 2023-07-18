@@ -71,6 +71,9 @@
 #include <octomap/octomap.h>
 #include <octomap/OcTreeKey.h>
 #include <math.h>
+#include <std_msgs/Float32MultiArray.h>
+#include <std_msgs/MultiArrayLayout.h>
+#include <std_msgs/MultiArrayDimension.h>
 
 //#define COLOR_OCTOMAP_SERVER // switch color here - easier maintenance, only maintain OctomapServer. Two targets are defined in the cmake, octomap_server_color and octomap_server. One has this defined, and the other doesn't
 
@@ -209,7 +212,7 @@ protected:
   static std_msgs::ColorRGBA heightMapColor(double h);
   ros::NodeHandle m_nh;
   ros::NodeHandle m_nh_private;
-  ros::Publisher  m_markerPub, m_deltaPub, m_flowPub, m_binaryMapPub, m_fullMapPub, m_pointCloudPub, m_collisionObjectPub, m_mapPub, m_cmapPub, m_fmapPub, m_fmarkerPub, m_ftargetPub;
+  ros::Publisher  m_markerPub, m_deltaPub, m_flowPub, m_binaryMapPub, m_fullMapPub, m_pointCloudPub, m_collisionObjectPub, m_mapPub, m_cmapPub, m_fmapPub, m_fmarkerPub, m_ftargetPub, m_peaks;
   message_filters::Subscriber<sensor_msgs::PointCloud2>* m_pointCloudSub;
   tf::MessageFilter<sensor_msgs::PointCloud2>* m_tfPointCloudSub;
   message_filters::Subscriber<geometry_msgs::PoseStamped>* m_targetSub;
@@ -275,6 +278,8 @@ protected:
   FlowCell *flowMap1 = b1;
   FlowCell *flowMap2 = b2;
   float velRatio(FlowCell prevState);
+  std_msgs::Float32MultiArray msg;
+  float peaks[4];
   
   octomap::OcTreeKey shiftedKey;
   octomath::Vector3 shiftedOrigin;
