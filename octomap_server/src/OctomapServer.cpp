@@ -208,7 +208,7 @@ OctomapServer::OctomapServer(const ros::NodeHandle private_nh_, const ros::NodeH
   m_clearBBXService = m_nh_private.advertiseService("clear_bbx", &OctomapServer::clearBBXSrv, this);
   m_resetService = m_nh_private.advertiseService("reset", &OctomapServer::resetSrv, this);
 
-  m_peaks =  m_nh.advertise<std_msgs::Float32MultiArray>("peaks_of_speed", 1, m_latchedTopics);
+  m_peaks =  m_nh.advertise<geometry_msgs::Pose>("peaks_of_speed", 1, m_latchedTopics);
 
   dynamic_reconfigure::Server<OctomapServerConfig>::CallbackType f;
   f = boost::bind(&OctomapServer::reconfigureCallback, this, boost::placeholders::_1, boost::placeholders::_2);
@@ -222,14 +222,6 @@ OctomapServer::OctomapServer(const ros::NodeHandle private_nh_, const ros::NodeH
   offsetx,offsety,offsetz=0;
   timeLastScan = ros::Time::now();
   timeLastFcount = ros::Time::now();
-  std_msgs::MultiArrayLayout layout;
-  layout.data_offset=0;
-  layout.dim[0].size = 4;
-  layout.dim[0].stride = 1; 
-  layout.dim[0].label = "peaks"; 
-  msg.layout= layout;
-  std::vector<float>  vec;
-  msg.data=vec ;//(float *)malloc(sizeof(float)*4);
 }
 
 OctomapServer::~OctomapServer(){
@@ -1226,7 +1218,7 @@ void OctomapServer::calculateTarget(){
         cz = (flowMap2[i].z+(i/FLOW_GRID_L2))*size - originOnGrid.z();
 
         sqr = cx * cx + cy * cy + cz * cz;
-        float v = (flowMap2[i].xs*flowMap2[i].xs+flowMap2[i].ys*flowMap2[i].ys+flowMap2[i].zs*flowMap2[i].zs)/ timeDelta.toSec();
+        float v = (flowMap2[i].xs*flowMap2[i].xs+flowMap2[i].ys*flowMap2[i].ys+flowMap2[i].zs*flowMap2[i].zs)/ (timeDelta.toSec()*timeDelta.toSec());
         if(v>maxV){maxV=v;vD=sqr;}
         dot = std::min(0.0,(cx * flowMap2[i].xs + cy * flowMap2[i].ys + cz * flowMap2[i].zs)*0.06f / timeDelta.toSec()); //!!!???multiply by constant, average frame time
         if(dot<minD){minD=dot;maxVD=v;}
@@ -1251,12 +1243,12 @@ void OctomapServer::calculateTarget(){
       }
   }
 
-  msg.data[0]=maxV;
-  msg.data[1]=vD;
-  msg.data[2]=maxVD;
-  msg.data[3]=minD;
+  peaks.position.x= maxV;
+  peaks.position.y=vD;
+  peaks.position.z=maxVD;
+  peaks.orientation.x=minD;
 
-  m_peaks.publish(msg);
+  m_peaks.publish(peaks);
   
   
   //ROS_WARN_STREAM("max speed squared= "<<maxV<<" max speed towards drone= "<<maxVD);

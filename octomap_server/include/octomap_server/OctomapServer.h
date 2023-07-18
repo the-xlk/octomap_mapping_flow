@@ -71,9 +71,6 @@
 #include <octomap/octomap.h>
 #include <octomap/OcTreeKey.h>
 #include <math.h>
-#include <std_msgs/Float32MultiArray.h>
-#include <std_msgs/MultiArrayLayout.h>
-#include <std_msgs/MultiArrayDimension.h>
 
 //#define COLOR_OCTOMAP_SERVER // switch color here - easier maintenance, only maintain OctomapServer. Two targets are defined in the cmake, octomap_server_color and octomap_server. One has this defined, and the other doesn't
 
@@ -278,8 +275,7 @@ protected:
   FlowCell *flowMap1 = b1;
   FlowCell *flowMap2 = b2;
   float velRatio(FlowCell prevState);
-  std_msgs::Float32MultiArray msg;
-  float peaks[4];
+  geometry_msgs::Pose peaks;
   
   octomap::OcTreeKey shiftedKey;
   octomath::Vector3 shiftedOrigin;
