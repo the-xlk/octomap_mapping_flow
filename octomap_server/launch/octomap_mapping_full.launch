@@ -8,6 +8,11 @@
 -->
 <launch>
 
+	<include file="$(find realsense2_camera)/launch/custom_tracking.launch"/>
+	<include file="$(find mavros)/launch/px4.launch"/>
+	<node pkg="octomap_server" type="odom_to_pose" name="odom_to_pose"/>
+	<node pkg="octomap_server" type="rcOverride" name="rcOverride"/>
+
 	<node pkg="octomap_server" type="octomap_server_node" name="octomap_server">
 		<param name="resolution" value="0.2" />
 		

@@ -837,6 +837,7 @@ void OctomapServer::publishAll(const ros::Time& rostime){
   bool publishDeltaMarkerArray = (m_latchedTopics || m_deltaPub.getNumSubscribers() > 0);
   bool publishFlowMarkerArray = (m_latchedTopics || m_flowPub.getNumSubscribers() > 0);
 
+  ROS_WARN("1");
   // init markers for free space:
   visualization_msgs::MarkerArray freeNodesVis;
   // each array stores all cubes of a different size, one for each depth level:
@@ -1029,7 +1030,7 @@ void OctomapServer::publishAll(const ros::Time& rostime){
     m_fmarkerPub.publish(freeNodesVis);
   }
 
-
+   ROS_WARN("2");
   // finish pointcloud:
   if (publishPointCloud){
     sensor_msgs::PointCloud2 cloud;
@@ -1038,7 +1039,7 @@ void OctomapServer::publishAll(const ros::Time& rostime){
     cloud.header.stamp = rostime;
     m_pointCloudPub.publish(cloud);
   }
-
+   ROS_WARN("3");
   // Prep delta !!!
   if(publishDeltaMarkerArray){
     //!!!
@@ -1097,6 +1098,8 @@ void OctomapServer::publishAll(const ros::Time& rostime){
 
     m_deltaPub.publish(deltaNodesVis);
   }
+
+   ROS_WARN("5");
 
   // Prep flow !!!
   if(publishFlowMarkerArray){
@@ -1189,6 +1192,7 @@ void OctomapServer::publishAll(const ros::Time& rostime){
     m_flowPub.publish(flowNodesVis);
   }
 
+   ROS_WARN("6");
   if (publishBinaryMap)
     publishBinaryOctoMap(rostime);
 
@@ -1215,6 +1219,7 @@ void OctomapServer::calculateTargetCallback(const geometry_msgs::PoseStamped::Co
 }
 
 void OctomapServer::calculateTarget(){
+   ROS_WARN("7");
   double size = m_octree->getNodeSize(m_maxTreeDepth);
   //originOnGrid, starting at grid corner 0,0,0
   float fx=0, fy=0, fz=0, cx=0, cy=0, cz=0, dot=0, sqr = 0, dampen =1, maxV =0, vD=0, maxVD=0, minD=0;
@@ -1226,7 +1231,7 @@ void OctomapServer::calculateTarget(){
         cz = (flowMap2[i].z+(i/FLOW_GRID_L2))*size - originOnGrid.z();
 
         sqr = cx * cx + cy * cy + cz * cz;
-        float v = (flowMap2[i].xs*flowMap2[i].xs+flowMap2[i].ys*flowMap2[i].ys+flowMap2[i].zs*flowMap2[i].zs)/ timeDelta.toSec();
+        float v = (flowMap2[i].xs*flowMap2[i].xs+flowMap2[i].ys*flowMap2[i].ys+flowMap2[i].zs*flowMap2[i].zs)/ (timeDelta.toSec()*timeDelta.toSec());
         if(v>maxV){maxV=v;vD=sqr;}
         dot = std::min(0.0,(cx * flowMap2[i].xs + cy * flowMap2[i].ys + cz * flowMap2[i].zs)*0.06f / timeDelta.toSec()); //!!!???multiply by constant, average frame time
         if(dot<minD){minD=dot;maxVD=v;}
@@ -1251,12 +1256,12 @@ void OctomapServer::calculateTarget(){
       }
   }
 
-  msg.data[0]=maxV;
-  msg.data[1]=vD;
-  msg.data[2]=maxVD;
-  msg.data[3]=minD;
-
-  m_peaks.publish(msg);
+  //msg.data[0]=maxV;
+  //msg.data[1]=vD;
+  //msg.data[2]=maxVD;
+  //msg.data[3]=minD;
+//
+  //m_peaks.publish(msg);
   
   
   //ROS_WARN_STREAM("max speed squared= "<<maxV<<" max speed towards drone= "<<maxVD);
